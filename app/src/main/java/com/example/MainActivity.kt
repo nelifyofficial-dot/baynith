@@ -22,6 +22,7 @@ class MainActivity : FragmentActivity() {
 
     private var initialPlayMovieId by mutableStateOf<String?>(null)
     private var initialNavigateMovieId by mutableStateOf<String?>(null)
+    private var showUpdateDialogOnStart by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,7 +51,8 @@ class MainActivity : FragmentActivity() {
             NeliPlayTheme {
                 NeliPlayApp(
                     initialPlayMovieId = initialPlayMovieId,
-                    initialNavigateMovieId = initialNavigateMovieId
+                    initialNavigateMovieId = initialNavigateMovieId,
+                    showUpdateDialogOnStart = showUpdateDialogOnStart
                 )
             }
         }
@@ -66,6 +68,10 @@ class MainActivity : FragmentActivity() {
         if (intent == null) return
         val playId = intent.getStringExtra("EXTRA_PLAY_MOVIE_ID")
         val navigateId = intent.getStringExtra("EXTRA_NAVIGATE_MOVIE_ID")
+        val showUpdate = intent.getBooleanExtra(com.example.update.manager.UpdateManager.EXTRA_SHOW_UPDATE_DIALOG, false)
+        if (showUpdate) {
+            showUpdateDialogOnStart = true
+        }
         if (!playId.isNullOrBlank()) {
             initialPlayMovieId = playId
         } else if (!navigateId.isNullOrBlank()) {

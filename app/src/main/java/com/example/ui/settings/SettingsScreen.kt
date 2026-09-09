@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -35,11 +36,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +58,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.BuildConfig
 import com.example.ui.components.NeliPlayLogo
 import com.example.ui.downloads.formatBytes
 import com.example.ui.theme.NeliBluePrimary
@@ -64,17 +69,31 @@ import com.example.ui.theme.NeliSurfaceElevated
 import com.example.ui.theme.NeliSurfaceVariant
 import com.example.ui.theme.NeliTextSecondary
 import com.example.ui.theme.NeliVoid
+import com.example.update.model.UpdateState
+import com.example.update.ui.UpdateViewModel
 
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
+    updateViewModel: UpdateViewModel? = null,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val updateState = updateViewModel?.state?.collectAsState()?.value ?: UpdateState.Idle
+    val manualMessage = updateViewModel?.manualMessage?.collectAsState()?.value
+    val snackbarHostState = remember { SnackbarHostState() }
     var showQualityDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(manualMessage) {
+        if (!manualMessage.isNullOrBlank()) {
+            snackbarHostState.showSnackbar(manualMessage)
+            updateViewModel?.clearManualMessage()
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             Row(
                 modifier = Modifier
@@ -200,6 +219,62 @@ fun SettingsScreen(
                             subtitle = "New releases, featured movies, and live events",
                             checked = uiState.notifications,
                             onCheckedChange = { viewModel.toggleNotifications(it) }
+                        )
+                    }
+                }
+            }
+
+            // About & Updates
+            item {
+                SettingsSectionTitle(title = "About & Updates")
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = NeliSurface)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        SettingsClickableRow(
+                            icon = Icons.Default.Info,
+                            title = "Current Version",
+                            subtitle = "${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
+                            onClick = {}
+                        )
+
+                        SettingsDivider()
+
+                        val updateSubtitle = when (val s = updateState) {
+                            is UpdateState.Checking -> "Checking for updates..."
+                            is UpdateState.UpdateAvailable -> "Update available: v${s.info.versionName} • Tap to view"
+                            is UpdateState.Downloading -> {
+                                val pct = if (s.progress >= 0f) "${(s.progress * 100).toInt()}%" else "..."
+                                "Downloading update ($pct)"
+                            }
+                            is UpdateState.Downloaded -> "Package downloaded • Tap to install"
+                            is UpdateState.Installing -> "Installing update..."
+                            is UpdateState.PermissionRequired -> "Permission required • Tap to enable"
+                            is UpdateState.UpToDate -> "You are using the latest version of NeliPlay."
+                            is UpdateState.NoRelease -> "You are using the latest version of NeliPlay."
+                            is UpdateState.NoInternet -> "Unable to check for updates (No internet)"
+                            is UpdateState.Error -> s.message
+                            else -> manualMessage ?: "Tap to check for latest release"
+                        }
+
+                        SettingsClickableRow(
+                            icon = Icons.Default.SystemUpdate,
+                            title = "Check for Updates",
+                            subtitle = updateSubtitle,
+                            onClick = {
+                                if (updateState is UpdateState.UpdateAvailable ||
+                                    updateState is UpdateState.Downloaded ||
+                                    updateState is UpdateState.Downloading ||
+                                    updateState is UpdateState.PermissionRequired
+                                ) {
+                                    updateViewModel?.showUpdateDialog()
+                                } else {
+                                    updateViewModel?.checkForUpdates(isManual = true)
+                                }
+                            }
                         )
                     }
                 }

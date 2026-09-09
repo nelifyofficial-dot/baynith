@@ -7,4 +7,6 @@
     <string name="cast_app_id">CC1AD845</string>
     <string name="notification_channel_name">NeliPlay Entertainment</string>
     <string name="notification_channel_description">Notifications for movie releases and entertainment updates</string>
+    <string name="update_channel_name">NeliPlay App Updates</string>
+    <string name="update_channel_description">Notifications for new application releases and updates</string>
 </resources>
