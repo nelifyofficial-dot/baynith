@@ -29,6 +29,9 @@ class MainActivity : FragmentActivity() {
         // Initialize Firebase and Firestore with offline cache
         FirebaseManager.init(this)
 
+        // Prewarm WebView cache directory structure to prevent Chromium ENOENT directory scan errors
+        com.example.ui.player.embed.NeliPlayEmbedUtils.prewarmWebViewEnvironment(this)
+
         // Initialize NeliPlay notification channel
         NeliPlayNotificationManager.createNotificationChannel(this)
 

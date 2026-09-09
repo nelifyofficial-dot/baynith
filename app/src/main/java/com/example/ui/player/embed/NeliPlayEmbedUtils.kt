@@ -83,4 +83,49 @@ object NeliPlayEmbedUtils {
             </html>
         """.trimIndent()
     }
+
+    /**
+     * Checks if the device is running in an emulator or virtualized container lacking physical DRI rendernodes.
+     */
+    fun isEmulatorEnvironment(): Boolean {
+        val hardware = android.os.Build.HARDWARE.lowercase()
+        val model = android.os.Build.MODEL.lowercase()
+        val product = android.os.Build.PRODUCT.lowercase()
+        val fingerprint = android.os.Build.FINGERPRINT.lowercase()
+        return hardware.contains("goldfish") ||
+                hardware.contains("ranchu") ||
+                hardware.contains("cutf") ||
+                hardware.contains("cuttlefish") ||
+                model.contains("google_sdk") ||
+                model.contains("emulator") ||
+                model.contains("android sdk") ||
+                product.contains("sdk") ||
+                product.contains("vbox") ||
+                fingerprint.contains("generic")
+    }
+
+    /**
+     * Prepares WebView disk cache directories and code cache structures.
+     * Prevents Chromium simple_file_enumerator POSIX ENOENT errors on fresh installs:
+     * - opendir /cache/WebView/Default/HTTP Cache/Code Cache/wasm
+     * - opendir /cache/WebView/Default/HTTP Cache/Code Cache/js
+     */
+    fun prewarmWebViewEnvironment(context: android.content.Context) {
+        try {
+            val cache = context.cacheDir ?: return
+            val webViewDir = java.io.File(cache, "WebView/Default")
+            val httpCacheDir = java.io.File(webViewDir, "HTTP Cache")
+            val codeCacheDir = java.io.File(httpCacheDir, "Code Cache")
+            java.io.File(codeCacheDir, "js").mkdirs()
+            java.io.File(codeCacheDir, "wasm").mkdirs()
+            java.io.File(httpCacheDir, "index-dir").mkdirs()
+
+            val defaultCodeCache = java.io.File(webViewDir, "Code Cache")
+            java.io.File(defaultCodeCache, "js").mkdirs()
+            java.io.File(defaultCodeCache, "wasm").mkdirs()
+            java.io.File(webViewDir, "GPUCache").mkdirs()
+        } catch (t: Throwable) {
+            // Non-fatal, suppress if filesystem restricted
+        }
+    }
 }

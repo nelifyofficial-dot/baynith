@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -128,7 +129,14 @@ fun NeliPlayEmbeddedPlayer(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
+                        val isEmulator = NeliPlayEmbedUtils.isEmulatorEnvironment()
+                        if (isEmulator) {
+                            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                        }
                         customView?.let { cv ->
+                            if (isEmulator) {
+                                cv.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                            }
                             (cv.parent as? ViewGroup)?.removeView(cv)
                             addView(cv)
                         }
@@ -223,12 +231,21 @@ fun NeliPlayEmbeddedPlayer(
             ) {
                 AndroidView(
                     factory = { ctx ->
+                        // Prewarm code cache and index directories
+                        NeliPlayEmbedUtils.prewarmWebViewEnvironment(ctx)
+
                         WebView(ctx).apply {
                             layoutParams = ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
                             )
                             setBackgroundColor(android.graphics.Color.BLACK)
+
+                            // Prevent MESA from failing to query DRM rendernodes on emulator/container
+                            val isEmulator = NeliPlayEmbedUtils.isEmulatorEnvironment()
+                            if (isEmulator) {
+                                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                            }
 
                             // Security & Settings Configuration
                             settings.apply {
@@ -284,6 +301,16 @@ fun NeliPlayEmbeddedPlayer(
                                         hasError = true
                                         errorMessage = "Unable to connect to the embedded video provider."
                                     }
+                                }
+
+                                override fun onRenderProcessGone(
+                                    view: WebView?,
+                                    detail: RenderProcessGoneDetail?
+                                ): Boolean {
+                                    isLoading = false
+                                    hasError = true
+                                    errorMessage = "The embedded player encountered an unexpected termination. Tap retry to reload."
+                                    return true
                                 }
                             }
 
