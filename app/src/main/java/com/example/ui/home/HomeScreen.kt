@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.example.cast.NeliPlayCastButton
 import com.example.ui.components.ContinueWatchingCard
 import com.example.ui.components.EmptyStateView
-import com.example.ui.components.HeroBanner
+import com.example.ui.components.HeroBannerSlider
 import com.example.ui.components.MovieCard
 import com.example.ui.components.NeliPlayLogo
 import com.example.ui.components.SectionHeader
@@ -49,7 +49,7 @@ fun HomeScreen(
     onWatchClick: (String) -> Unit,
     onSearchClick: () -> Unit,
     onTvClick: () -> Unit,
-    onSettingsClick: () -> Unit,
+    onSettingsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -96,17 +96,6 @@ fun HomeScreen(
                             tint = Color.White
                         )
                     }
-
-                    IconButton(
-                        onClick = onSettingsClick,
-                        modifier = Modifier.testTag("top_settings_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = Color.White
-                        )
-                    }
                 }
             }
         },
@@ -144,15 +133,21 @@ fun HomeScreen(
                     .padding(innerPadding),
                 contentPadding = PaddingValues(bottom = 80.dp)
             ) {
-                // Hero Banner
-                uiState.featuredMovie?.let { featured ->
+                // Hero Banner Slider
+                val sliderMovies = if (uiState.featuredMovies.isNotEmpty()) {
+                    uiState.featuredMovies
+                } else {
+                    listOfNotNull(uiState.featuredMovie)
+                }
+
+                if (sliderMovies.isNotEmpty()) {
                     item {
-                        HeroBanner(
-                            movie = featured,
-                            isFavorite = uiState.favoritesIds.contains(featured.id),
-                            onWatchClick = { onWatchClick(featured.id) },
-                            onToggleFavorite = { viewModel.toggleFavorite(featured) },
-                            onDetailsClick = { onMovieClick(featured.id) }
+                        HeroBannerSlider(
+                            movies = sliderMovies,
+                            favoritesIds = uiState.favoritesIds,
+                            onWatchClick = onWatchClick,
+                            onToggleFavorite = { viewModel.toggleFavorite(it) },
+                            onDetailsClick = onMovieClick
                         )
                     }
                 }

@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 data class HomeUiState(
     val isLoading: Boolean = true,
     val featuredMovie: Movie? = null,
+    val featuredMovies: List<Movie> = emptyList(),
     val continueWatching: List<WatchProgressEntity> = emptyList(),
     val trendingMovies: List<Movie> = emptyList(),
     val latestMovies: List<Movie> = emptyList(),
@@ -56,7 +57,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         errorMessage = errorMsg
                     )
                 } else {
-                    val featured = movies.firstOrNull { it.featured } ?: movies.firstOrNull()
+                    val explicitFeatured = movies.filter { it.featured }
+                    val sliderMovies = if (explicitFeatured.size >= 3) {
+                        explicitFeatured.take(5)
+                    } else {
+                        (explicitFeatured + movies.sortedByDescending { it.rating })
+                            .distinctBy { it.id }
+                            .take(5)
+                    }
+                    val featured = sliderMovies.firstOrNull()
                     val trending = movies.sortedByDescending { it.rating }
                     val latest = movies.sortedByDescending { it.year ?: 0 }
 
@@ -78,6 +87,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     HomeUiState(
                         isLoading = false,
                         featuredMovie = featured,
+                        featuredMovies = sliderMovies,
                         continueWatching = continueWatching,
                         trendingMovies = trending,
                         latestMovies = latest,

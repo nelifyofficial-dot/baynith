@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -24,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,10 +43,83 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.model.Movie
 import com.example.ui.theme.NeliBluePrimary
+import com.example.ui.theme.NeliCyanAccent
 import com.example.ui.theme.NeliRatingGold
 import com.example.ui.theme.NeliSurfaceElevated
 import com.example.ui.theme.NeliTextSecondary
 import com.example.ui.theme.NeliVoid
+import kotlinx.coroutines.delay
+
+@Composable
+fun HeroBannerSlider(
+    movies: List<Movie>,
+    favoritesIds: Set<String>,
+    onWatchClick: (String) -> Unit,
+    onToggleFavorite: (Movie) -> Unit,
+    onDetailsClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (movies.isEmpty()) return
+
+    val pagerState = rememberPagerState(pageCount = { movies.size })
+
+    // Auto-advance banner every 6 seconds if not currently being touched/dragged
+    LaunchedEffect(pagerState, movies.size) {
+        if (movies.size > 1) {
+            while (true) {
+                delay(6000)
+                if (!pagerState.isScrollInProgress) {
+                    val nextPage = (pagerState.currentPage + 1) % movies.size
+                    pagerState.animateScrollToPage(nextPage)
+                }
+            }
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(400.dp)
+            .testTag("hero_banner_slider")
+    ) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            val movie = movies[page]
+            val isFav = favoritesIds.contains(movie.id)
+            HeroBannerItem(
+                movie = movie,
+                isFavorite = isFav,
+                onWatchClick = { onWatchClick(movie.id) },
+                onToggleFavorite = { onToggleFavorite(movie) },
+                onDetailsClick = { onDetailsClick(movie.id) }
+            )
+        }
+
+        // Pager indicator dots at bottom center
+        if (movies.size > 1) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 10.dp)
+                    .testTag("hero_slider_indicators"),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(movies.size) { index ->
+                    val isSelected = pagerState.currentPage == index
+                    Box(
+                        modifier = Modifier
+                            .size(if (isSelected) 8.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(if (isSelected) NeliCyanAccent else Color.White.copy(alpha = 0.4f))
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun HeroBanner(
@@ -52,10 +130,30 @@ fun HeroBanner(
     onDetailsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    HeroBannerItem(
+        movie = movie,
+        isFavorite = isFavorite,
+        onWatchClick = onWatchClick,
+        onToggleFavorite = onToggleFavorite,
+        onDetailsClick = onDetailsClick,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun HeroBannerItem(
+    movie: Movie,
+    isFavorite: Boolean,
+    onWatchClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onDetailsClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(390.dp)
+            .height(400.dp)
+            .clickable(onClick = onDetailsClick)
             .testTag("hero_banner")
     ) {
         val backdropUrl = resolveBackdropUrl(movie.backdropPath.ifEmpty { movie.posterPath })
@@ -87,7 +185,7 @@ fun HeroBanner(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(horizontal = 20.dp, vertical = 22.dp),
             verticalArrangement = Arrangement.Bottom
         ) {
             // Genre and Rating pill row
@@ -144,7 +242,7 @@ fun HeroBanner(
             Text(
                 text = movie.title,
                 color = Color.White,
-                fontSize = 26.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = (-0.5).sp,
                 maxLines = 2,

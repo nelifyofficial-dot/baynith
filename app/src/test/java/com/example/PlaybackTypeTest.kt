@@ -108,4 +108,15 @@ class PlaybackTypeTest {
         val html = NeliPlayEmbedUtils.buildSafeEmbedHtml("")
         assertEquals("", html)
     }
+
+    @Test
+    fun testEmbedUtils_playsinlineAndSanitizedHost() {
+        val snippet = "<iframe src=\"https://myembed.video/player/456\"></iframe>"
+        val html = NeliPlayEmbedUtils.buildSafeEmbedHtml(snippet)
+        assertTrue(html.contains("playsinline"))
+
+        val host = NeliPlayEmbedUtils.extractSanitizedHost("https://stream.cdn.com/embed/123?token=secret123&pass=secret456")
+        assertEquals("stream.cdn.com", host)
+        assertFalse(host.contains("secret123"))
+    }
 }

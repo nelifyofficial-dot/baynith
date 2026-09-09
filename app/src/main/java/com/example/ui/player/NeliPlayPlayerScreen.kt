@@ -138,7 +138,8 @@ fun NeliPlayPlayerScreen(
         NeliPlayEmbeddedPlayer(
             embedCode = uiState.embedCode,
             title = uiState.displayTitle,
-            onBack = onBack
+            onBack = onBack,
+            contentId = contentId
         )
     } else {
         NeliPlayExoPlayerContent(

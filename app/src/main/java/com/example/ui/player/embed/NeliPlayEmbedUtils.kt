@@ -17,17 +17,24 @@ object NeliPlayEmbedUtils {
         val embedSnippet = if (trimmed.startsWith("http://", ignoreCase = true) ||
             trimmed.startsWith("https://", ignoreCase = true)
         ) {
-            """<iframe src="$trimmed" allowfullscreen allow="autoplay; fullscreen; encrypted-media; picture-in-picture" frameborder="0"></iframe>"""
+            """<iframe src="$trimmed" allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture; accelerometer; gyroscope" playsinline="true" webkit-playsinline="true" frameborder="0"></iframe>"""
         } else {
             // If it's an iframe without allowfullscreen or allow permissions, add standard playback permissions
             var code = trimmed
             if (!code.contains("allowfullscreen", ignoreCase = true)) {
-                code = code.replaceFirst("<iframe", "<iframe allowfullscreen", ignoreCase = true)
+                code = code.replaceFirst("<iframe", """<iframe allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true"""", ignoreCase = true)
             }
             if (!code.contains("allow=", ignoreCase = true)) {
                 code = code.replaceFirst(
                     "<iframe",
-                    """<iframe allow="autoplay; fullscreen; encrypted-media; picture-in-picture"""",
+                    """<iframe allow="autoplay; fullscreen; encrypted-media; picture-in-picture; accelerometer; gyroscope"""",
+                    ignoreCase = true
+                )
+            }
+            if (!code.contains("playsinline", ignoreCase = true)) {
+                code = code.replaceFirst(
+                    "<iframe",
+                    """<iframe playsinline="true" webkit-playsinline="true"""",
                     ignoreCase = true
                 )
             }
@@ -126,6 +133,27 @@ object NeliPlayEmbedUtils {
             java.io.File(webViewDir, "GPUCache").mkdirs()
         } catch (t: Throwable) {
             // Non-fatal, suppress if filesystem restricted
+        }
+    }
+
+    /**
+     * Extracts only the host or domain part of a URL for safe developer logging,
+     * strictly excluding sensitive query parameters, auth tokens, and credentials.
+     */
+    fun extractSanitizedHost(rawUrl: String?): String {
+        if (rawUrl.isNullOrBlank()) return "unknown"
+        return try {
+            val cleaned = if (!rawUrl.contains("://")) "https://$rawUrl" else rawUrl
+            val uri = java.net.URI(cleaned)
+            val host = uri.host
+            if (!host.isNullOrBlank()) host else uri.scheme ?: "local"
+        } catch (_: Throwable) {
+            try {
+                val aUri = android.net.Uri.parse(rawUrl)
+                aUri.host ?: aUri.scheme ?: "unknown"
+            } catch (__: Throwable) {
+                "invalid_url"
+            }
         }
     }
 }

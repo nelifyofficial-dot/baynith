@@ -138,7 +138,8 @@ fun AccountScreen(
         AccountItemRow(
             icon = Icons.Default.Settings,
             title = "Settings",
-            onClick = onNavigateToSettings
+            onClick = onNavigateToSettings,
+            modifier = Modifier.testTag("account_settings_row")
         )
 
         Spacer(modifier = Modifier.height(10.dp))
