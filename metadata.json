@@ -1,0 +1,6 @@
+{
+  "name": "NeliPlay",
+  "description": "Premium native movie streaming and downloading application with Live TV and offline playback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

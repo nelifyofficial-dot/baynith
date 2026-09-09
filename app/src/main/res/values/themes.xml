@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <style name="Theme.MyApplication" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/neli_void</item>
+        <item name="android:colorBackground">@color/neli_void</item>
+        <item name="colorPrimary">@color/neli_blue</item>
+        <item name="colorPrimaryDark">@color/neli_void</item>
+        <item name="colorAccent">@color/neli_cyan</item>
+        <item name="mediaRouteTheme">@style/CustomMediaRouteTheme</item>
+    </style>
+
+    <style name="CustomMediaRouteTheme" parent="Theme.MediaRouter">
+        <item name="android:windowBackground">@color/neli_void</item>
+        <item name="android:colorBackground">@color/neli_void</item>
+        <item name="colorPrimary">@color/neli_blue</item>
+        <item name="colorPrimaryDark">@color/neli_void</item>
+        <item name="colorAccent">@color/neli_cyan</item>
+    </style>
+
+</resources>

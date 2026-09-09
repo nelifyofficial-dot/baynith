@@ -1,0 +1,72 @@
+package com.example
+
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
+import com.example.data.firebase.FirebaseManager
+import com.example.ui.navigation.NeliPlayApp
+import com.example.ui.theme.NeliPlayTheme
+import com.example.util.NeliPlayNotificationManager
+
+class MainActivity : FragmentActivity() {
+
+    private var initialPlayMovieId by mutableStateOf<String?>(null)
+    private var initialNavigateMovieId by mutableStateOf<String?>(null)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Initialize Firebase and Firestore with offline cache
+        FirebaseManager.init(this)
+
+        // Initialize NeliPlay notification channel
+        NeliPlayNotificationManager.createNotificationChannel(this)
+
+        // Request notification permission on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+
+        handleIntent(intent)
+
+        enableEdgeToEdge()
+
+        setContent {
+            NeliPlayTheme {
+                NeliPlayApp(
+                    initialPlayMovieId = initialPlayMovieId,
+                    initialNavigateMovieId = initialNavigateMovieId
+                )
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+        val playId = intent.getStringExtra("EXTRA_PLAY_MOVIE_ID")
+        val navigateId = intent.getStringExtra("EXTRA_NAVIGATE_MOVIE_ID")
+        if (!playId.isNullOrBlank()) {
+            initialPlayMovieId = playId
+        } else if (!navigateId.isNullOrBlank()) {
+            initialNavigateMovieId = navigateId
+        }
+    }
+}

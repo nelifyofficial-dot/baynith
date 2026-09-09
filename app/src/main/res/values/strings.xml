@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">NeliPlay</string>
+    <!-- Google Cast Receiver Application ID.
+         CC1AD845 is the default Google Cast Media Receiver.
+         To use a custom receiver registered in Google Cast SDK Developer Console,
+         replace CC1AD845 with your custom Application ID. -->
+    <string name="cast_app_id">CC1AD845</string>
+    <string name="notification_channel_name">NeliPlay Entertainment</string>
+    <string name="notification_channel_description">Notifications for movie releases and entertainment updates</string>
+</resources>
