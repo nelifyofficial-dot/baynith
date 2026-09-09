@@ -152,17 +152,13 @@ fun NeliPlayEmbeddedPlayer(
             lifecycleOwner.lifecycle.removeObserver(observer)
             try {
                 Log.d(TAG, "[contentId=$contentId] Destroying embedded WebView")
-                webViewInstance?.apply {
-                    onPause()
-                    pauseTimers()
-                    stopLoading()
-                    loadUrl("about:blank")
-                    clearHistory()
-                    destroy()
+                webViewInstance?.let { wv ->
+                    (wv.parent as? ViewGroup)?.removeView(wv)
+                    wv.destroy()
                 }
                 webViewInstance = null
                 activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.w(TAG, "[contentId=$contentId] WebView cleanup exception: ${e.message}")
             }
         }
@@ -255,13 +251,11 @@ fun NeliPlayEmbeddedPlayer(
                         onClick = {
                             Log.d(TAG, "[contentId=$contentId] User tapped Retry: recreating fresh WebView")
                             try {
-                                webViewInstance?.apply {
-                                    stopLoading()
-                                    loadUrl("about:blank")
-                                    clearHistory()
-                                    destroy()
+                                webViewInstance?.let { wv ->
+                                    (wv.parent as? ViewGroup)?.removeView(wv)
+                                    wv.destroy()
                                 }
-                            } catch (e: Exception) {
+                            } catch (e: Throwable) {
                                 Log.w(TAG, "[contentId=$contentId] Error during retry cleanup: ${e.message}")
                             }
                             webViewInstance = null
@@ -333,8 +327,8 @@ fun NeliPlayEmbeddedPlayer(
                                 )
                                 setBackgroundColor(android.graphics.Color.BLACK)
 
-                                // Hardware acceleration enabled for video decoding
-                                setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                                // Prevent GPU memory exhaustion / OOM renderer crashes by using standard window rendering
+                                setLayerType(View.LAYER_TYPE_NONE, null)
 
                                 // Security & Settings Configuration
                                 settings.apply {
@@ -358,6 +352,10 @@ fun NeliPlayEmbeddedPlayer(
                                 cookieManager.setAcceptThirdPartyCookies(this, true)
 
                                 webChromeClient = object : WebChromeClient() {
+                                    override fun getDefaultVideoPoster(): Bitmap? {
+                                        return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+                                    }
+
                                     override fun onShowCustomView(view: View, callback: CustomViewCallback) {
                                         Log.d(TAG, "[contentId=$contentId] WebChromeClient: onShowCustomView")
                                         customView = view
@@ -469,10 +467,19 @@ fun NeliPlayEmbeddedPlayer(
                                         val priority = detail?.rendererPriorityAtExit() ?: -1
                                         Log.e(TAG, "[contentId=$contentId] onRenderProcessGone (didCrash=$didCrash, priority=$priority)")
 
+                                        // Promptly detach and destroy dead WebView so the OS browser terminator does not crash the app
+                                        try {
+                                            (view?.parent as? ViewGroup)?.removeView(view)
+                                            view?.destroy()
+                                        } catch (e: Throwable) {
+                                            Log.w(TAG, "[contentId=$contentId] Error destroying terminated WebView: ${e.message}")
+                                        }
+                                        webViewInstance = null
+
                                         isLoading = false
                                         hasError = true
-                                        errorMessage = "Unable to continue playback. Please check your connection and try again."
-                                        // Return true to prevent Android from crashing the entire app
+                                        errorMessage = "Playback was interrupted. Tap Retry to reload the player."
+                                        // Return true to signal that the app has handled the termination and prevent application crash
                                         return true
                                     }
                                 }
@@ -485,6 +492,14 @@ fun NeliPlayEmbeddedPlayer(
                         },
                         update = {
                             // Intentionally no-op to prevent reload on normal recompositions
+                        },
+                        onRelease = { webView ->
+                            try {
+                                (webView.parent as? ViewGroup)?.removeView(webView)
+                                webView.destroy()
+                            } catch (e: Throwable) {
+                                Log.w(TAG, "[contentId=$contentId] Error in onRelease: ${e.message}")
+                            }
                         },
                         modifier = Modifier.fillMaxSize()
                     )
