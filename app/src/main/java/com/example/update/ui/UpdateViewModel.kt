@@ -67,12 +67,20 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
                 is CheckResult.Available -> {
                     Log.d(TAG, "Update available: v${result.info.versionName} (build ${result.info.versionCode})")
                     _state.value = UpdateState.UpdateAvailable(result.info)
-                    _isDialogVisible.value = true
-                    _manualMessage.value = null
                     updateManager.recordAutoCheckPerformed()
 
-                    if (!isManual) {
-                        updateManager.showUpdateNotification(result.info)
+                    val acknowledged = updateManager.getAcknowledgedVersion()
+                    val alreadyAcked = !isManual && !result.info.forceUpdate && acknowledged == result.info.versionName
+
+                    if (alreadyAcked) {
+                        Log.d(TAG, "Update v${result.info.versionName} was already acknowledged. Suppressing auto dialog.")
+                        _isDialogVisible.value = false
+                    } else {
+                        _isDialogVisible.value = true
+                        _manualMessage.value = null
+                        if (!isManual) {
+                            updateManager.showUpdateNotification(result.info)
+                        }
                     }
                 }
 
@@ -232,6 +240,10 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         if (!isForced) {
+            val cur = _state.value
+            if (cur is UpdateState.UpdateAvailable) {
+                updateManager.setAcknowledgedVersion(cur.info.versionName)
+            }
             _isDialogVisible.value = false
         }
     }

@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 data class DownloadsUiState(
+    val isRefreshing: Boolean = false,
     val inProgressDownloads: List<DownloadEntity> = emptyList(),
     val completedDownloads: List<DownloadEntity> = emptyList(),
     val totalStorageUsedBytes: Long = 0L,
@@ -30,11 +31,13 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
     private val downloadRepo = DownloadRepository(application, db.downloadDao())
     private val userDataRepo = UserDataRepository(application)
     private val context = application
+    private val _isRefreshing = MutableStateFlow(false)
 
     val uiState: StateFlow<DownloadsUiState> = combine(
         downloadRepo.getAllDownloads(),
-        userDataRepo.wifiOnlyPreference
-    ) { downloads, wifiOnly ->
+        userDataRepo.wifiOnlyPreference,
+        _isRefreshing
+    ) { downloads, wifiOnly, refreshing ->
         val inProgress = downloads.filter { it.status == DownloadState.DOWNLOADING || it.status == DownloadState.PAUSED || it.status == DownloadState.PENDING }
         val completed = downloads.filter { it.status == DownloadState.COMPLETED }
 
@@ -47,6 +50,7 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         DownloadsUiState(
+            isRefreshing = refreshing,
             inProgressDownloads = inProgress,
             completedDownloads = completed,
             totalStorageUsedBytes = totalBytes,
@@ -57,6 +61,14 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = DownloadsUiState()
     )
+
+    fun refresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            kotlinx.coroutines.delay(600)
+            _isRefreshing.value = false
+        }
+    }
 
     fun pauseDownload(movieId: String) {
         downloadRepo.pauseDownload(movieId)

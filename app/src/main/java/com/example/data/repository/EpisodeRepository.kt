@@ -55,7 +55,7 @@ class EpisodeRepository {
     }
 
     /**
-     * Observes episodes associated with a movie or series.
+     * Observes episodes associated with a movie.
      */
     fun getEpisodesForMovie(movieId: String): Flow<List<Episode>> = callbackFlow {
         var listener: ListenerRegistration? = null
@@ -81,6 +81,78 @@ class EpisodeRepository {
                 }
         } catch (e: Exception) {
             Log.e(TAG, "Exception querying episodes: ${e.message}")
+            trySend(emptyList())
+        }
+
+        awaitClose {
+            listener?.remove()
+        }
+    }
+
+    /**
+     * Observes episodes associated with a series (Item 27).
+     * Filtered by seriesId and sorted by seasonNumber, episodeNumber.
+     */
+    fun getEpisodesForSeries(seriesId: String): Flow<List<Episode>> = callbackFlow {
+        var listener: ListenerRegistration? = null
+        try {
+            listener = FirebaseManager.episodesCollection
+                .whereEqualTo("seriesId", seriesId)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.w(TAG, "Query episodes for series $seriesId error: ${error.message}")
+                        trySend(emptyList())
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        val episodes = snapshot.documents.mapNotNull { doc ->
+                            try {
+                                val ep = Episode.fromDocument(doc)
+                                if (ep.published) ep else null
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Episode parse error: ${e.message}")
+                                null
+                            }
+                        }.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
+                        trySend(episodes)
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying episodes for series $seriesId: ${e.message}")
+            trySend(emptyList())
+        }
+
+        awaitClose {
+            listener?.remove()
+        }
+    }
+
+    fun searchEpisodes(query: String): Flow<List<Episode>> = callbackFlow {
+        var listener: ListenerRegistration? = null
+        try {
+            listener = FirebaseManager.episodesCollection
+                .whereEqualTo("published", true)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        trySend(emptyList())
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        val q = query.trim().lowercase()
+                        val list = snapshot.documents.mapNotNull { doc ->
+                            try {
+                                val ep = Episode.fromDocument(doc)
+                                if (ep.published && (ep.title.lowercase().contains(q) || ep.overview.lowercase().contains(q))) {
+                                    ep
+                                } else null
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                        trySend(list)
+                    }
+                }
+        } catch (e: Exception) {
             trySend(emptyList())
         }
 

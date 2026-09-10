@@ -28,20 +28,101 @@ import kotlinx.coroutines.launch
 object NeliPlayNotificationManager {
     const val CHANNEL_ID = "neliplay_entertainment_channel"
     private const val NOTIFICATION_ID_BASE = 1001
+    const val PLAYBACK_NOTIFICATION_ID = 1002
 
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = context.getString(R.string.notification_channel_name)
             val descriptionText = context.getString(R.string.notification_channel_description)
-            val importance = NotificationManager.IMPORTANCE_HIGH
+            val importance = NotificationManager.IMPORTANCE_LOW
             val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
                 description = descriptionText
-                enableVibration(true)
-                setShowBadge(true)
+                enableVibration(false)
+                setShowBadge(false)
             }
             val notificationManager: NotificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    /**
+     * Shows playback notification with exact metadata for active media (Movie, Episode, or Live TV).
+     */
+    fun showPlaybackNotification(
+        context: Context,
+        title: String,
+        subtitle: String,
+        artworkUrl: String?,
+        contentId: String,
+        isLive: Boolean = false
+    ) {
+        createNotificationChannel(context)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val posterBitmap: Bitmap? = try {
+                if (!artworkUrl.isNullOrBlank()) {
+                    val loader = ImageLoader(context)
+                    val req = ImageRequest.Builder(context)
+                        .data(artworkUrl)
+                        .allowHardware(false)
+                        .build()
+                    val result = (loader.execute(req) as? SuccessResult)?.drawable
+                    (result as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                } else {
+                    BitmapFactory.decodeResource(context.resources, R.drawable.ic_neliplay_logo)
+                }
+            } catch (e: Exception) {
+                try {
+                    BitmapFactory.decodeResource(context.resources, R.drawable.ic_neliplay_logo)
+                } catch (ex: Exception) {
+                    null
+                }
+            }
+
+            val contentIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("EXTRA_NAVIGATE_MOVIE_ID", contentId)
+            }
+            val contentPendingIntent = PendingIntent.getActivity(
+                context,
+                PLAYBACK_NOTIFICATION_ID,
+                contentIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_neliplay_logo)
+                .setContentTitle(title)
+                .setContentText(subtitle)
+                .setSubText(if (isLive) "LIVE TV" else "NeliPlay")
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setContentIntent(contentPendingIntent)
+
+            if (posterBitmap != null) {
+                builder.setLargeIcon(posterBitmap)
+            }
+
+            try {
+                val notificationManager = NotificationManagerCompat.from(context)
+                notificationManager.notify(PLAYBACK_NOTIFICATION_ID, builder.build())
+            } catch (e: SecurityException) {
+                android.util.Log.w("NeliPlayNotification", "Notification permission not granted: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Clears active media playback notification when player stops or activity disposes.
+     */
+    fun clearPlaybackNotification(context: Context) {
+        try {
+            val notificationManager = NotificationManagerCompat.from(context)
+            notificationManager.cancel(PLAYBACK_NOTIFICATION_ID)
+        } catch (e: Exception) {
+            // ignore
         }
     }
 

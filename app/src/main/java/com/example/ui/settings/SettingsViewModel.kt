@@ -18,6 +18,7 @@ import java.io.File
 data class SettingsUiState(
     val wifiOnly: Boolean = false,
     val autoPlay: Boolean = true,
+    val autoSkipIntro: Boolean = false,
     val notifications: Boolean = true,
     val defaultQuality: String = "Auto",
     val cacheSizeBytes: Long = 0L
@@ -29,16 +30,24 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private val _cacheSize = MutableStateFlow(0L)
 
+    private val playbackPrefsFlow = combine(
+        userDataRepo.autoPlayPreference,
+        userDataRepo.autoSkipIntroPreference,
+        userDataRepo.videoQualityPreference
+    ) { autoPlay, autoSkip, quality ->
+        Triple(autoPlay, autoSkip, quality)
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         userDataRepo.wifiOnlyPreference,
-        userDataRepo.autoPlayPreference,
         userDataRepo.notificationsPreference,
-        userDataRepo.videoQualityPreference,
+        playbackPrefsFlow,
         _cacheSize
-    ) { wifiOnly, autoPlay, notifs, quality, cacheSize ->
+    ) { wifiOnly, notifs, (autoPlay, autoSkip, quality), cacheSize ->
         SettingsUiState(
             wifiOnly = wifiOnly,
             autoPlay = autoPlay,
+            autoSkipIntro = autoSkip,
             notifications = notifs,
             defaultQuality = quality,
             cacheSizeBytes = cacheSize
@@ -94,6 +103,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun toggleAutoPlay(enabled: Boolean) {
         viewModelScope.launch { userDataRepo.setAutoPlay(enabled) }
+    }
+
+    fun toggleAutoSkipIntro(enabled: Boolean) {
+        viewModelScope.launch { userDataRepo.setAutoSkipIntro(enabled) }
     }
 
     fun toggleNotifications(enabled: Boolean) {

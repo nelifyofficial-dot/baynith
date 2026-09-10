@@ -33,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,6 +95,11 @@ sealed class Screen(val route: String, val title: String, val selectedIcon: Imag
     }
 
     object Settings : Screen("settings", "Settings", Icons.Filled.Home, Icons.Outlined.Home)
+
+    object Series : Screen("series", "Series", Icons.Filled.LiveTv, Icons.Outlined.LiveTv)
+    object SeriesDetails : Screen("series_details/{seriesId}", "Series Details", Icons.Filled.LiveTv, Icons.Outlined.LiveTv) {
+        fun createRoute(seriesId: String) = "series_details/$seriesId"
+    }
 }
 
 val bottomNavItems = listOf(
@@ -107,11 +113,26 @@ val bottomNavItems = listOf(
 @Composable
 fun NeliPlayApp(
     initialPlayMovieId: String? = null,
-    initialNavigateMovieId: String? = null
+    initialNavigateMovieId: String? = null,
+    showUpdateDialogOnStart: Boolean = false
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    val updateViewModel: com.example.update.ui.UpdateViewModel = viewModel()
+    val updateState by updateViewModel.state.collectAsState()
+    val isUpdateDialogVisible by updateViewModel.isDialogVisible.collectAsState()
+
+    LaunchedEffect(Unit) {
+        updateViewModel.checkForUpdates(isManual = false)
+    }
+
+    LaunchedEffect(showUpdateDialogOnStart) {
+        if (showUpdateDialogOnStart) {
+            updateViewModel.showUpdateDialog()
+        }
+    }
 
     // Handle deep link / notification click intent
     LaunchedEffect(initialPlayMovieId) {
@@ -220,6 +241,9 @@ fun NeliPlayApp(
                     },
                     onSearchClick = { navController.navigate(Screen.Search.route) },
                     onTvClick = { navController.navigate(Screen.Tv.route) },
+                    onSeriesClick = { seriesId ->
+                        navController.navigate(Screen.SeriesDetails.createRoute(seriesId))
+                    },
                     onSettingsClick = { navController.navigate(Screen.Settings.route) }
                 )
             }
@@ -230,6 +254,12 @@ fun NeliPlayApp(
                     viewModel = searchVm,
                     onMovieClick = { movieId ->
                         navController.navigate(Screen.MovieDetails.createRoute(movieId))
+                    },
+                    onSeriesClick = { seriesId ->
+                        navController.navigate(Screen.SeriesDetails.createRoute(seriesId))
+                    },
+                    onChannelClick = { channelId ->
+                        navController.navigate(Screen.Player.createRoute(channelId, isLive = true))
                     },
                     onBack = { navController.popBackStack() }
                 )
@@ -324,11 +354,58 @@ fun NeliPlayApp(
                 )
             }
 
+            composable(Screen.Series.route) {
+                val seriesVm: com.example.ui.series.SeriesViewModel = viewModel()
+                com.example.ui.series.SeriesScreen(
+                    viewModel = seriesVm,
+                    onSeriesClick = { seriesId ->
+                        navController.navigate(Screen.SeriesDetails.createRoute(seriesId))
+                    },
+                    onSearchClick = { navController.navigate(Screen.Search.route) }
+                )
+            }
+
+            composable(
+                route = Screen.SeriesDetails.route,
+                arguments = listOf(navArgument("seriesId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val seriesId = backStackEntry.arguments?.getString("seriesId") ?: ""
+                val seriesDetailsVm: com.example.ui.series.SeriesDetailsViewModel = viewModel()
+                com.example.ui.series.SeriesDetailsScreen(
+                    seriesId = seriesId,
+                    viewModel = seriesDetailsVm,
+                    onPlayEpisode = { episodeId ->
+                        navController.navigate(Screen.Player.createRoute(episodeId, isLive = false))
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
             composable(Screen.Account.route) {
                 AccountScreen(
-                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
+                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                    onNavigateToFavorites = { navController.navigate(Screen.Library.route) },
+                    onNavigateToDownloads = { navController.navigate(Screen.Downloads.route) }
                 )
             }
         }
+    }
+
+    if (isUpdateDialogVisible) {
+        com.example.update.ui.UpdateDialog(
+            state = updateState,
+            onUpdateClick = { info -> updateViewModel.startDownload(info) },
+            onCancelDownload = { updateViewModel.cancelDownload() },
+            onRetryInstall = {
+                val cur = updateState
+                if (cur is com.example.update.model.UpdateState.Downloaded) {
+                    updateViewModel.triggerInstallation(cur.info, cur.apkFile)
+                } else if (cur is com.example.update.model.UpdateState.PermissionRequired) {
+                    updateViewModel.triggerInstallation(cur.info, cur.apkFile)
+                }
+            },
+            onOpenPermissionSettings = { updateViewModel.openUnknownAppSourcesSettings() },
+            onDismiss = { updateViewModel.dismissDialog() }
+        )
     }
 }

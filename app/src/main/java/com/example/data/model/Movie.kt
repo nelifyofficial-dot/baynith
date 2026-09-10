@@ -24,11 +24,54 @@ data class Movie(
     val downloadEnabled: Boolean = false,
     val narrated: Boolean? = null,
     val narrationLanguage: String? = null,
+    val contentGroupId: String? = null,
+    val versionType: String? = null, // "original", "dubbed", "narrated"
+    val audioLanguage: String? = null, // e.g. "English", "Swahili"
+    val regionAvailability: String? = null, // "WORLDWIDE", "EAST_AFRICA", "SELECTED_COUNTRIES"
+    val availableCountries: List<String>? = null,
     val featured: Boolean = false,
     val published: Boolean = true,
     val createdAt: Any? = null,
     val updatedAt: Any? = null
 ) {
+    /**
+     * Identifies if this movie is a Swahili dubbed version.
+     */
+    val isSwahiliDubbed: Boolean
+        get() = versionType.equals("dubbed", ignoreCase = true) &&
+                audioLanguage.equals("Swahili", ignoreCase = true)
+
+    /**
+     * Identifies if this movie is a Swahili narrated version.
+     * Preserves backward compatibility with legacy `narrated` and `narrationLanguage` fields.
+     */
+    val isSwahiliNarrated: Boolean
+        get() = (narrated == true && narrationLanguage.equals("Swahili", ignoreCase = true)) ||
+                (versionType.equals("narrated", ignoreCase = true) && audioLanguage.equals("Swahili", ignoreCase = true))
+
+    /**
+     * Identifies whether this movie is Swahili content (dubbed, narrated, or native).
+     */
+    val isSwahili: Boolean
+        get() = isSwahiliDubbed || isSwahiliNarrated ||
+                audioLanguage.equals("Swahili", ignoreCase = true) ||
+                narrationLanguage.equals("Swahili", ignoreCase = true)
+
+    /**
+     * Elegant badge label according to Requirements 15 & 16:
+     * - "Swahili Narrated" if narrated == true && narrationLanguage == "Swahili"
+     * - "Swahili Dubbed" if versionType == "dubbed" && audioLanguage == "Swahili"
+     */
+    val versionBadgeLabel: String?
+        get() = when {
+            isSwahiliDubbed -> "Swahili Dubbed"
+            isSwahiliNarrated -> "Swahili Narrated"
+            versionType.equals("dubbed", ignoreCase = true) -> "${audioLanguage ?: ""} Dubbed".trim()
+            versionType.equals("narrated", ignoreCase = true) -> "${audioLanguage ?: ""} Narrated".trim()
+            versionType.equals("original", ignoreCase = true) -> "Original"
+            else -> null
+        }
+
     /**
      * Determines the effective playback type: "mp4", "m3u8", or "embed".
      * Follows backward-compatibility rules:
@@ -122,6 +165,13 @@ data class Movie(
                 else -> null
             }
 
+            val availableCountriesRaw = data["availableCountries"]
+            val availableCountriesList: List<String>? = when (availableCountriesRaw) {
+                is List<*> -> availableCountriesRaw.mapNotNull { it?.toString() }
+                is String -> availableCountriesRaw.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                else -> null
+            }
+
             return Movie(
                 id = doc.id.ifEmpty { data["id"]?.toString() ?: "" },
                 tmdbId = tmdbIdValue,
@@ -144,6 +194,11 @@ data class Movie(
                 downloadEnabled = downloadEnabledValue,
                 narrated = narratedValue,
                 narrationLanguage = data["narrationLanguage"]?.toString(),
+                contentGroupId = data["contentGroupId"]?.toString(),
+                versionType = data["versionType"]?.toString(),
+                audioLanguage = data["audioLanguage"]?.toString(),
+                regionAvailability = data["regionAvailability"]?.toString(),
+                availableCountries = availableCountriesList,
                 featured = featuredValue,
                 published = publishedValue,
                 createdAt = data["createdAt"],

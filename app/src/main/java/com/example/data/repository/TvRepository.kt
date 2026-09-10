@@ -97,4 +97,18 @@ class TvRepository {
     }
 
     fun getChannelById(channelId: String): Flow<TvChannel?> = getChannel(channelId)
+
+    fun searchChannels(query: String): Flow<List<TvChannel>> = getPublishedChannels().map { list ->
+        if (query.isBlank()) {
+            emptyList()
+        } else {
+            val q = query.trim().lowercase()
+            list.filter { ch ->
+                ch.name.lowercase().contains(q) ||
+                        (ch.category?.lowercase()?.contains(q) == true) ||
+                        (ch.country?.lowercase()?.contains(q) == true) ||
+                        (ch.description?.lowercase()?.contains(q) == true)
+            }
+        }
+    }
 }

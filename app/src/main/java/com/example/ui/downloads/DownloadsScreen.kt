@@ -59,6 +59,7 @@ import coil.compose.AsyncImage
 import com.example.data.local.entities.DownloadEntity
 import com.example.data.local.entities.DownloadState
 import com.example.ui.components.EmptyStateView
+import com.example.ui.components.NeliPullRefreshBox
 import com.example.ui.components.resolveImageUrl
 import com.example.ui.theme.NeliBluePrimary
 import com.example.ui.theme.NeliCyanAccent
@@ -203,11 +204,16 @@ fun DownloadsScreen(
         containerColor = NeliVoid,
         modifier = modifier.fillMaxSize()
     ) { innerPadding ->
-        Column(
+        NeliPullRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
             if (selectedTab == 0) {
                 // Completed Downloads tab
                 if (uiState.completedDownloads.isEmpty()) {
@@ -266,6 +272,7 @@ fun DownloadsScreen(
             }
         }
     }
+}
 }
 
 @Composable

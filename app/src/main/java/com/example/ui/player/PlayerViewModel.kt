@@ -23,12 +23,14 @@ data class PlayerUiState(
     val isLoading: Boolean = true,
     val movie: Movie? = null,
     val episode: Episode? = null,
+    val seriesName: String? = null,
     val tvChannel: TvChannel? = null,
     val mediaUrl: String = "",
     val playbackType: String = "mp4", // "mp4", "m3u8", "embed"
     val embedCode: String = "",
     val isLive: Boolean = false,
     val isOffline: Boolean = false,
+    val autoSkipIntro: Boolean = false,
     val initialPositionMs: Long = 0L,
     val error: String? = null
 ) {
@@ -38,6 +40,7 @@ data class PlayerUiState(
 
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
     private val movieRepo = MovieRepository()
+    private val seriesRepo = com.example.data.repository.SeriesRepository()
     private val episodeRepo = EpisodeRepository()
     private val tvRepo = TvRepository()
     private val userDataRepo = UserDataRepository(application)
@@ -49,7 +52,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun loadMedia(contentId: String, isLiveTv: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
-            _uiState.value = PlayerUiState(isLoading = true, isLive = isLiveTv)
+            val autoSkip = userDataRepo.autoSkipIntroPreference.firstOrNull() ?: false
+            _uiState.value = PlayerUiState(isLoading = true, isLive = isLiveTv, autoSkipIntro = autoSkip)
 
             if (isLiveTv) {
                 val channel = tvRepo.getChannelById(contentId).firstOrNull()
@@ -60,7 +64,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         tvChannel = channel,
                         mediaUrl = channel.streamUrl,
                         playbackType = pType,
-                        isLive = true
+                        isLive = true,
+                        autoSkipIntro = false
                     )
                 } else {
                     _uiState.value = PlayerUiState(
@@ -81,6 +86,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
                 val movie = movieRepo.getMovieById(contentId).firstOrNull()
                 val episode = if (movie == null) episodeRepo.getEpisodeById(contentId).firstOrNull() else null
+                var fetchedSeriesName: String? = null
+                if (episode != null) {
+                    val sId = episode.seriesId ?: episode.movieId
+                    if (!sId.isNullOrBlank()) {
+                        val s = seriesRepo.getSeriesById(sId).firstOrNull()
+                        fetchedSeriesName = s?.name
+                    }
+                }
 
                 if (isOfflinePlayable && download != null) {
                     _uiState.value = PlayerUiState(
@@ -90,6 +103,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         playbackType = "mp4",
                         isLive = false,
                         isOffline = true,
+                        autoSkipIntro = autoSkip,
                         initialPositionMs = resumePosition
                     )
                 } else if (movie != null) {
@@ -121,6 +135,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             playbackType = effectiveType,
                             isLive = false,
                             isOffline = false,
+                            autoSkipIntro = autoSkip,
                             initialPositionMs = resumePosition
                         )
                     } else {
@@ -137,6 +152,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             _uiState.value = PlayerUiState(
                                 isLoading = false,
                                 episode = episode,
+                                seriesName = fetchedSeriesName,
                                 playbackType = "embed",
                                 embedCode = "",
                                 error = "Unable to load this embedded player."
@@ -145,6 +161,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             _uiState.value = PlayerUiState(
                                 isLoading = false,
                                 episode = episode,
+                                seriesName = fetchedSeriesName,
                                 playbackType = "embed",
                                 embedCode = episode.embedCode,
                                 isLive = false,
@@ -155,16 +172,19 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         _uiState.value = PlayerUiState(
                             isLoading = false,
                             episode = episode,
+                            seriesName = fetchedSeriesName,
                             mediaUrl = episode.streamUrl,
                             playbackType = effectiveType,
                             isLive = false,
                             isOffline = false,
+                            autoSkipIntro = autoSkip,
                             initialPositionMs = resumePosition
                         )
                     } else {
                         _uiState.value = PlayerUiState(
                             isLoading = false,
                             episode = episode,
+                            seriesName = fetchedSeriesName,
                             error = "Video stream could not be loaded. Please check your internet connection."
                         )
                     }

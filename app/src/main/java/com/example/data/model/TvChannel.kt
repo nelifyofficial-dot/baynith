@@ -9,6 +9,7 @@ data class TvChannel(
     val streamUrl: String = "",
     val country: String? = null,
     val category: String? = null,
+    val description: String? = null,
     val featured: Boolean = false,
     val published: Boolean = true,
     val isLive: Boolean = true,
@@ -19,9 +20,10 @@ data class TvChannel(
         fun fromDocument(doc: DocumentSnapshot): TvChannel {
             val data = doc.data ?: emptyMap<String, Any>()
 
-            val publishedValue: Boolean = when (val p = data["published"]) {
-                is Boolean -> p
-                is String -> p.equals("true", ignoreCase = true)
+            val rawPublished = data["published"] ?: data["enabled"]
+            val publishedValue: Boolean = when (rawPublished) {
+                is Boolean -> rawPublished
+                is String -> rawPublished.equals("true", ignoreCase = true)
                 null -> true
                 else -> false
             }
@@ -39,13 +41,16 @@ data class TvChannel(
                 else -> false
             }
 
+            val logoString = (data["logoUrl"] ?: data["logo"])?.toString() ?: ""
+
             return TvChannel(
                 id = doc.id.ifEmpty { data["id"]?.toString() ?: "" },
                 name = data["name"]?.toString() ?: "Live Channel",
-                logoUrl = data["logoUrl"]?.toString() ?: "",
+                logoUrl = logoString,
                 streamUrl = data["streamUrl"]?.toString() ?: "",
                 country = data["country"]?.toString(),
                 category = data["category"]?.toString() ?: "General",
+                description = data["overview"]?.toString() ?: data["description"]?.toString(),
                 featured = featuredValue,
                 published = publishedValue,
                 isLive = isLiveValue,

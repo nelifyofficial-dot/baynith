@@ -58,6 +58,7 @@ import coil.compose.AsyncImage
 import com.example.data.local.entities.FavoriteEntity
 import com.example.data.local.entities.WatchProgressEntity
 import com.example.ui.components.EmptyStateView
+import com.example.ui.components.NeliPullRefreshBox
 import com.example.ui.components.resolveBackdropUrl
 import com.example.ui.components.resolveImageUrl
 import com.example.ui.theme.NeliBluePrimary
@@ -133,11 +134,16 @@ fun LibraryScreen(
         containerColor = NeliVoid,
         modifier = modifier.fillMaxSize()
     ) { innerPadding ->
-        Column(
+        NeliPullRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
             if (selectedTab == 0) {
                 // Favorites Tab
                 if (uiState.favorites.isEmpty()) {
@@ -212,6 +218,7 @@ fun LibraryScreen(
             }
         }
     }
+}
 }
 
 @Composable

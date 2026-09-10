@@ -38,7 +38,9 @@ import com.example.ui.components.EmptyStateView
 import com.example.ui.components.HeroBannerSlider
 import com.example.ui.components.MovieCard
 import com.example.ui.components.NeliPlayLogo
+import com.example.ui.components.NeliPullRefreshBox
 import com.example.ui.components.SectionHeader
+import com.example.ui.series.SeriesCard
 import com.example.ui.theme.NeliCyanAccent
 import com.example.ui.theme.NeliVoid
 
@@ -49,6 +51,7 @@ fun HomeScreen(
     onWatchClick: (String) -> Unit,
     onSearchClick: () -> Unit,
     onTvClick: () -> Unit,
+    onSeriesClick: (String) -> Unit = {},
     onSettingsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -102,127 +105,148 @@ fun HomeScreen(
         containerColor = NeliVoid,
         modifier = modifier.fillMaxSize()
     ) { innerPadding ->
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = NeliCyanAccent)
-            }
-        } else if (uiState.featuredMovie == null && uiState.trendingMovies.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                val hasError = !uiState.errorMessage.isNullOrBlank()
-                EmptyStateView(
-                    title = if (hasError) "Unable to Load Movies" else "No Movies Available Right Now",
-                    message = uiState.errorMessage ?: "Published movies from NeliPlay Studio will appear here automatically in real time.",
-                    actionButtonText = if (hasError) "Watch Live TV" else "Watch Live TV",
-                    onActionClick = onTvClick
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(bottom = 80.dp)
-            ) {
-                // Hero Banner Slider
-                val sliderMovies = if (uiState.featuredMovies.isNotEmpty()) {
-                    uiState.featuredMovies
-                } else {
-                    listOfNotNull(uiState.featuredMovie)
+        NeliPullRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = NeliCyanAccent)
                 }
-
-                if (sliderMovies.isNotEmpty()) {
-                    item {
-                        HeroBannerSlider(
-                            movies = sliderMovies,
-                            favoritesIds = uiState.favoritesIds,
-                            onWatchClick = onWatchClick,
-                            onToggleFavorite = { viewModel.toggleFavorite(it) },
-                            onDetailsClick = onMovieClick
-                        )
+            } else if (uiState.featuredMovie == null && uiState.trendingMovies.isEmpty() && uiState.trendingSeries.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val hasError = !uiState.errorMessage.isNullOrBlank()
+                    EmptyStateView(
+                        title = if (hasError) "Unable to Load Movies" else "No Movies Available Right Now",
+                        message = uiState.errorMessage ?: "Published movies from NeliPlay Studio will appear here automatically in real time.",
+                        actionButtonText = if (hasError) "Watch Live TV" else "Watch Live TV",
+                        onActionClick = onTvClick
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 80.dp)
+                ) {
+                    // Hero Banner Slider
+                    val sliderMovies = if (uiState.featuredMovies.isNotEmpty()) {
+                        uiState.featuredMovies
+                    } else {
+                        listOfNotNull(uiState.featuredMovie)
                     }
-                }
 
-                // Continue Watching
-                if (uiState.continueWatching.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        SectionHeader(title = "Continue Watching")
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            items(uiState.continueWatching, key = { it.movieId }) { item ->
-                                ContinueWatchingCard(
-                                    item = item,
-                                    onClick = { onWatchClick(item.movieId) }
-                                )
+                    if (sliderMovies.isNotEmpty()) {
+                        item {
+                            HeroBannerSlider(
+                                movies = sliderMovies,
+                                favoritesIds = uiState.favoritesIds,
+                                onWatchClick = onWatchClick,
+                                onToggleFavorite = { viewModel.toggleFavorite(it) },
+                                onDetailsClick = onMovieClick
+                            )
+                        }
+                    }
+
+                    // Continue Watching
+                    if (uiState.continueWatching.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            SectionHeader(title = "Continue Watching")
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                items(uiState.continueWatching, key = { it.movieId }) { item ->
+                                    ContinueWatchingCard(
+                                        item = item,
+                                        onClick = { onWatchClick(item.movieId) }
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                // Trending Now
-                if (uiState.trendingMovies.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(20.dp))
-                        SectionHeader(title = "Trending Now")
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(uiState.trendingMovies, key = { it.id }) { movie ->
-                                MovieCard(
-                                    movie = movie,
-                                    onClick = { onMovieClick(movie.id) }
-                                )
+                    // Trending Now (Movies)
+                    if (uiState.trendingMovies.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(20.dp))
+                            SectionHeader(title = "Trending Now")
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(uiState.trendingMovies, key = { it.id }) { movie ->
+                                    MovieCard(
+                                        movie = movie,
+                                        onClick = { onMovieClick(movie.id) }
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                // Latest Movies
-                if (uiState.latestMovies.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(20.dp))
-                        SectionHeader(title = "Latest Movies")
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(uiState.latestMovies, key = { it.id }) { movie ->
-                                MovieCard(
-                                    movie = movie,
-                                    onClick = { onMovieClick(movie.id) }
-                                )
+                    // Trending TV Series (Requirement 1 & 25)
+                    if (uiState.trendingSeries.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(20.dp))
+                            SectionHeader(title = "Popular Series")
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(uiState.trendingSeries, key = { it.id }) { series ->
+                                    SeriesCard(
+                                        series = series,
+                                        onClick = { onSeriesClick(series.id) }
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                // Dynamic Categories / Genres from Firestore
-                uiState.genreSections.forEach { (genre, movies) ->
-                    item {
-                        Spacer(modifier = Modifier.height(20.dp))
-                        SectionHeader(title = "$genre Movies")
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(movies, key = { it.id }) { movie ->
-                                MovieCard(
-                                    movie = movie,
-                                    onClick = { onMovieClick(movie.id) }
-                                )
+                    // Latest Movies
+                    if (uiState.latestMovies.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(20.dp))
+                            SectionHeader(title = "Latest Movies")
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(uiState.latestMovies, key = { it.id }) { movie ->
+                                    MovieCard(
+                                        movie = movie,
+                                        onClick = { onMovieClick(movie.id) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Dynamic Categories / Genres from Firestore
+                    uiState.genreSections.forEach { (genre, movies) ->
+                        item {
+                            Spacer(modifier = Modifier.height(20.dp))
+                            SectionHeader(title = "$genre Movies")
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(movies, key = { it.id }) { movie ->
+                                    MovieCard(
+                                        movie = movie,
+                                        onClick = { onMovieClick(movie.id) }
+                                    )
+                                }
                             }
                         }
                     }

@@ -82,9 +82,11 @@ object FirebaseManager {
         get() = FirebaseFirestore.getInstance()
 
     val moviesCollection get() = firestore.collection("movies")
+    val seriesCollection get() = firestore.collection("series")
     val episodesCollection get() = firestore.collection("episodes")
     val tvChannelsCollection get() = firestore.collection("tvChannels")
     val categoriesCollection get() = firestore.collection("categories")
     val notificationsCollection get() = firestore.collection("notifications")
     val settingsCollection get() = firestore.collection("settings")
+    val usersCollection get() = firestore.collection("users")
 }

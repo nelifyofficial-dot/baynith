@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -22,17 +23,22 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,11 +48,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.components.EmptyStateView
 import com.example.ui.components.MovieCard
 import com.example.ui.components.SectionHeader
+import com.example.ui.components.TvChannelCard
+import com.example.ui.series.SeriesCard
 import com.example.ui.theme.NeliBluePrimary
 import com.example.ui.theme.NeliBorder
 import com.example.ui.theme.NeliCyanAccent
@@ -59,16 +68,15 @@ import com.example.ui.theme.NeliVoid
 fun SearchScreen(
     viewModel: SearchViewModel,
     onMovieClick: (String) -> Unit,
+    onSeriesClick: (String) -> Unit = {},
+    onChannelClick: (String) -> Unit = {},
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val query by viewModel.searchQuery.collectAsState()
-    val selectedFilter by viewModel.selectedFilter.collectAsState()
-    val searchResults by viewModel.searchResults.collectAsState()
-    val popularMovies by viewModel.popularMovies.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
-    val filters = listOf("All", "Movies", "Action", "Comedy", "Drama", "African", "Gospel")
-    val trendingTags = listOf("Action", "John Wick", "African Movies", "Animation", "Horror", "Gospel")
+    val filters = listOf("All", "Movies", "Series", "Live TV")
+    val trendingTags = listOf("Action", "African Movies", "Animation", "Comedy", "Drama", "Gospel", "Horror")
 
     Scaffold(
         topBar = {
@@ -95,11 +103,11 @@ fun SearchScreen(
                     }
 
                     OutlinedTextField(
-                        value = query,
+                        value = uiState.query,
                         onValueChange = { viewModel.onQueryChange(it) },
                         placeholder = {
                             Text(
-                                text = "Search movies, genres, actors...",
+                                text = "Search movies, series, channels...",
                                 color = NeliTextSecondary,
                                 fontSize = 14.sp
                             )
@@ -112,7 +120,7 @@ fun SearchScreen(
                             )
                         },
                         trailingIcon = {
-                            if (query.isNotEmpty()) {
+                            if (uiState.query.isNotEmpty()) {
                                 IconButton(onClick = { viewModel.clearQuery() }) {
                                     Icon(
                                         imageVector = Icons.Default.Clear,
@@ -122,6 +130,12 @@ fun SearchScreen(
                                 }
                             }
                         },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(
+                            onSearch = {
+                                viewModel.commitSearch(uiState.query)
+                            }
+                        ),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = NeliSurface,
@@ -140,19 +154,20 @@ fun SearchScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Filter chips
+                // Filter chips: All, Movies, Series, Live TV
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
                     items(filters) { filter ->
-                        val isSelected = selectedFilter == filter
+                        val isSelected = uiState.selectedFilter == filter
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(if (isSelected) NeliBluePrimary else NeliSurfaceElevated)
                                 .clickable { viewModel.onFilterSelect(filter) }
                                 .padding(horizontal = 14.dp, vertical = 6.dp)
+                                .testTag("search_filter_$filter")
                         ) {
                             Text(
                                 text = filter,
@@ -173,89 +188,241 @@ fun SearchScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (query.isBlank()) {
-                // Pre-search state: Trending Searches chips & Popular Movies
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Trending Searches",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
-                    )
-
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(trendingTags) { tag ->
-                            Box(
+            if (uiState.query.isBlank()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 60.dp)
+                ) {
+                    // Recent Searches
+                    if (uiState.recentSearches.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(NeliSurface)
-                                    .clickable { viewModel.onQueryChange(tag) }
-                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = tag,
-                                    color = NeliCyanAccent,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.History,
+                                        contentDescription = null,
+                                        tint = NeliCyanAccent,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Recent Searches",
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                TextButton(onClick = { viewModel.clearRecentSearches() }) {
+                                    Text(
+                                        text = "Clear all",
+                                        color = NeliTextSecondary,
+                                        fontSize = 12.sp
+                                    )
+                                }
                             }
+
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(uiState.recentSearches) { term ->
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(NeliSurface)
+                                            .clickable {
+                                                viewModel.onQueryChange(term)
+                                                viewModel.commitSearch(term)
+                                            }
+                                            .padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = term,
+                                            color = Color.White,
+                                            fontSize = 12.sp
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        IconButton(
+                                            onClick = { viewModel.removeRecentSearch(term) },
+                                            modifier = Modifier.size(18.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Remove",
+                                                tint = NeliTextSecondary,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    // Trending Searches chips
+                    item {
+                        Text(
+                            text = "Trending Tags",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+                        )
 
-                    if (popularMovies.isNotEmpty()) {
-                        SectionHeader(title = "Popular on NeliPlay")
-                        LazyVerticalGrid(
-                            columns = GridCells.Adaptive(110.dp),
-                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
-                            modifier = Modifier.weight(1f)
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(popularMovies, key = { it.id }) { movie ->
-                                MovieCard(
-                                    movie = movie,
-                                    cardWidth = 110,
-                                    cardHeight = 165,
-                                    onClick = { onMovieClick(movie.id) }
-                                )
+                            items(trendingTags) { tag ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(NeliSurface)
+                                        .clickable {
+                                            viewModel.onQueryChange(tag)
+                                            viewModel.commitSearch(tag)
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = tag,
+                                        color = NeliCyanAccent,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
+
+                    // Popular on NeliPlay
+                    if (uiState.popularMovies.isNotEmpty()) {
+                        item {
+                            SectionHeader(title = "Popular on NeliPlay")
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(uiState.popularMovies, key = { it.id }) { movie ->
+                                    MovieCard(
+                                        movie = movie,
+                                        cardWidth = 110,
+                                        cardHeight = 165,
+                                        onClick = {
+                                            viewModel.commitSearch(movie.title)
+                                            onMovieClick(movie.id)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            } else if (searchResults.isEmpty()) {
+            } else if (uiState.isSearching) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = NeliCyanAccent)
+                }
+            } else if (uiState.isEmpty) {
                 EmptyStateView(
-                    title = "No Movies Found",
-                    message = "We couldn't find anything matching \"$query\". Try searching for another title, actor, or genre."
+                    title = "No Results Found",
+                    message = "We couldn't find anything matching \"${uiState.query}\". Try checking the spelling or searching for another title."
                 )
             } else {
-                Text(
-                    text = "Results for \"$query\" (${searchResults.size})",
-                    color = NeliTextSecondary,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-                )
-
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(110.dp),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 80.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.fillMaxSize()
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
-                    items(searchResults, key = { it.id }) { movie ->
-                        MovieCard(
-                            movie = movie,
-                            cardWidth = 110,
-                            cardHeight = 165,
-                            onClick = { onMovieClick(movie.id) }
+                    item {
+                        Text(
+                            text = "Results for \"${uiState.query}\" (${uiState.totalResults})",
+                            color = NeliTextSecondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
                         )
+                    }
+
+                    // Movies Results
+                    if (uiState.movies.isNotEmpty()) {
+                        item {
+                            SectionHeader(title = "Movies (${uiState.movies.size})")
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(uiState.movies, key = { it.id }) { movie ->
+                                    MovieCard(
+                                        movie = movie,
+                                        cardWidth = 110,
+                                        cardHeight = 165,
+                                        onClick = {
+                                            viewModel.commitSearch(uiState.query)
+                                            onMovieClick(movie.id)
+                                        }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+
+                    // TV Series Results
+                    if (uiState.series.isNotEmpty()) {
+                        item {
+                            SectionHeader(title = "TV Series (${uiState.series.size})")
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(uiState.series, key = { it.id }) { series ->
+                                    SeriesCard(
+                                        series = series,
+                                        onClick = {
+                                            viewModel.commitSearch(uiState.query)
+                                            onSeriesClick(series.id)
+                                        }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+
+                    // Live TV Channel Results
+                    if (uiState.channels.isNotEmpty()) {
+                        item {
+                            SectionHeader(title = "Live TV Channels (${uiState.channels.size})")
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(uiState.channels, key = { it.id }) { channel ->
+                                    TvChannelCard(
+                                        channel = channel,
+                                        onClick = {
+                                            viewModel.commitSearch(uiState.query)
+                                            onChannelClick(channel.id)
+                                        }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
                     }
                 }
             }

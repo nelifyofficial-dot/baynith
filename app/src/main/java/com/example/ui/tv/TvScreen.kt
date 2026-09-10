@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.components.EmptyStateView
+import com.example.ui.components.NeliPullRefreshBox
 import com.example.ui.components.TvChannelCard
 import com.example.ui.theme.NeliBluePrimary
 import com.example.ui.theme.NeliCyanAccent
@@ -119,45 +120,47 @@ fun TvScreen(
         containerColor = NeliVoid,
         modifier = modifier.fillMaxSize()
     ) { innerPadding ->
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = NeliCyanAccent)
-            }
-        } else if (uiState.filteredChannels.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                val hasError = !uiState.errorMessage.isNullOrBlank()
-                EmptyStateView(
-                    title = if (hasError) "Unable to Load TV Channels" else "No Live Channels",
-                    message = uiState.errorMessage ?: "Live TV channels added from NeliPlay Studio will appear here in real time.",
-                    icon = Icons.Default.LiveTv
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(uiState.filteredChannels, key = { it.id }) { channel ->
-                    TvChannelCard(
-                        channel = channel,
-                        onClick = { onChannelClick(channel.id) }
+        NeliPullRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = NeliCyanAccent)
+                }
+            } else if (uiState.filteredChannels.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val hasError = !uiState.errorMessage.isNullOrBlank()
+                    EmptyStateView(
+                        title = if (hasError) "Unable to Load TV Channels" else "No Live Channels",
+                        message = uiState.errorMessage ?: "Live TV channels added from NeliPlay Studio will appear here in real time.",
+                        icon = Icons.Default.LiveTv
                     )
                 }
-                item {
-                    Spacer(modifier = Modifier.height(80.dp))
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(uiState.filteredChannels, key = { it.id }) { channel ->
+                        TvChannelCard(
+                            channel = channel,
+                            onClick = { onChannelClick(channel.id) }
+                        )
+                    }
+                    item {
+                        Spacer(modifier = Modifier.height(80.dp))
+                    }
                 }
             }
         }

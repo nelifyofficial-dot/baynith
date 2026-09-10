@@ -52,6 +52,7 @@ class UpdateManager(private val context: Context) {
         private const val PREF_LAST_CHECK_TIME = "pref_last_update_check_time"
         private const val PREF_LAST_NOTIFIED_VERSION = "pref_last_notified_version"
         private const val PREF_LAST_NOTIFICATION_TIME = "pref_last_notification_time"
+        private const val PREF_ACKNOWLEDGED_VERSION = "pref_acknowledged_version"
 
         const val EXTRA_SHOW_UPDATE_DIALOG = "EXTRA_SHOW_UPDATE_DIALOG"
     }
@@ -89,6 +90,13 @@ class UpdateManager(private val context: Context) {
 
     fun recordAutoCheckPerformed() {
         prefs.edit().putLong(PREF_LAST_CHECK_TIME, System.currentTimeMillis()).apply()
+    }
+
+    fun getAcknowledgedVersion(): String =
+        prefs.getString(PREF_ACKNOWLEDGED_VERSION, "") ?: ""
+
+    fun setAcknowledgedVersion(version: String) {
+        prefs.edit().putString(PREF_ACKNOWLEDGED_VERSION, version).apply()
     }
 
     /**

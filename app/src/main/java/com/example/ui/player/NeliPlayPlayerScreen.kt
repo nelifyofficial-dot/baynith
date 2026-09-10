@@ -172,6 +172,7 @@ private fun NeliPlayExoPlayerContent(
     var playbackDuration by remember { mutableLongStateOf(0L) }
     var currentSpeed by remember { mutableFloatStateOf(1.0f) }
     var selectedQuality by remember { mutableStateOf("720p") }
+    var hasSkippedIntro by remember { mutableStateOf(false) }
 
     // Initialize ExoPlayer
     val exoPlayer = remember(context) {
@@ -200,6 +201,25 @@ private fun NeliPlayExoPlayerContent(
         ExoPlayer.Builder(context, renderersFactory).build().apply {
             playWhenReady = true
             repeatMode = Player.REPEAT_MODE_OFF
+        }
+    }
+
+    fun performSkipIntro() {
+        if (hasSkippedIntro) return
+        hasSkippedIntro = true
+        val duration = exoPlayer.duration
+        val targetMs = if (duration > 0) {
+            300_000L.coerceAtMost((duration - 1000L).coerceAtLeast(0L))
+        } else {
+            300_000L
+        }
+        exoPlayer.seekTo(targetMs)
+        exoPlayer.play()
+    }
+
+    LaunchedEffect(uiState.autoSkipIntro, playbackPosition, isLive, hasSkippedIntro) {
+        if (!isLive && uiState.autoSkipIntro && !hasSkippedIntro && playbackPosition in 200L..10_000L) {
+            performSkipIntro()
         }
     }
 
@@ -233,10 +253,40 @@ private fun NeliPlayExoPlayerContent(
         }
     }
 
-    // Post rich notification when movie is loaded and playing
-    LaunchedEffect(uiState.movie) {
-        uiState.movie?.let { movie ->
-            NeliPlayNotificationManager.showMovieNotification(context, movie)
+    // Update notification metadata whenever media changes
+    LaunchedEffect(uiState.movie, uiState.episode, uiState.tvChannel) {
+        val movie = uiState.movie
+        val episode = uiState.episode
+        val channel = uiState.tvChannel
+        if (movie != null) {
+            NeliPlayNotificationManager.showPlaybackNotification(
+                context = context,
+                title = movie.title,
+                subtitle = "NeliPlay Movie",
+                artworkUrl = movie.posterPath?.ifBlank { movie.backdropPath } ?: movie.backdropPath,
+                contentId = movie.id,
+                isLive = false
+            )
+        } else if (episode != null) {
+            val epCode = "S${String.format("%02d", episode.seasonNumber)} E${String.format("%02d", episode.episodeNumber)}"
+            val epTitle = episode.title.ifBlank { "Episode ${episode.episodeNumber}" }
+            NeliPlayNotificationManager.showPlaybackNotification(
+                context = context,
+                title = "$epCode — $epTitle",
+                subtitle = uiState.seriesName ?: "NeliPlay Series",
+                artworkUrl = episode.stillPath,
+                contentId = episode.id,
+                isLive = false
+            )
+        } else if (channel != null) {
+            NeliPlayNotificationManager.showPlaybackNotification(
+                context = context,
+                title = channel.name,
+                subtitle = "Live TV • ${channel.category ?: "Streaming"}",
+                artworkUrl = channel.logoUrl,
+                contentId = channel.id,
+                isLive = true
+            )
         }
     }
 
@@ -295,6 +345,7 @@ private fun NeliPlayExoPlayerContent(
         exoPlayer.addListener(listener)
 
         onDispose {
+            NeliPlayNotificationManager.clearPlaybackNotification(context)
             viewModel.saveProgress(exoPlayer.currentPosition, exoPlayer.duration)
             exoPlayer.removeListener(listener)
             exoPlayer.stop()
@@ -818,6 +869,42 @@ private fun NeliPlayExoPlayerContent(
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Temporary Skip Intro/Promo Segment button (First 10s: 0:00 -> 0:10)
+        if (!isLive && !hasSkippedIntro && playbackPosition in 0L..10_000L && playerError == null && !isCasting) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = if (showControls) 96.dp else 36.dp, end = 24.dp)
+            ) {
+                Surface(
+                    onClick = { performSkipIntro() },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.Black.copy(alpha = 0.85f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeliCyanAccent),
+                    modifier = Modifier.testTag("skip_intro_button")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = "Skip Intro",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Forward10,
+                            contentDescription = "Skip to 5:00",
+                            tint = NeliCyanAccent,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }

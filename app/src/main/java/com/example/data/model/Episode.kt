@@ -11,11 +11,14 @@ data class Episode(
     val seasonNumber: Int = 1,
     val overview: String = "",
     val stillPath: String = "",
+    val airDate: String? = null,
     val streamUrl: String = "",
     val playbackType: String = "",
     val embedCode: String = "",
     val runtime: Int? = null,
     val downloadEnabled: Boolean = false,
+    val narrated: Boolean? = null,
+    val narrationLanguage: String? = null,
     val published: Boolean = true,
     val createdAt: Any? = null,
     val updatedAt: Any? = null
@@ -46,26 +49,39 @@ data class Episode(
                 is String -> de.equals("true", ignoreCase = true)
                 else -> false
             }
-            val publishedVal = when (val p = data["published"]) {
-                is Boolean -> p
-                is String -> p.equals("true", ignoreCase = true)
+            val rawPublished = data["published"] ?: data["enabled"]
+            val publishedVal = when (rawPublished) {
+                is Boolean -> rawPublished
+                is String -> rawPublished.equals("true", ignoreCase = true)
                 null -> true
                 else -> false
             }
+            val narratedVal = when (val n = data["narrated"]) {
+                is Boolean -> n
+                is String -> n.equals("true", ignoreCase = true)
+                else -> null
+            }
+            val episodeTitle = (data["title"] ?: data["name"])?.toString() ?: ""
+            val episodeStill = (data["stillPath"] ?: data["still_path"] ?: data["poster"] ?: data["thumbnail"])?.toString() ?: ""
+            val episodeStream = (data["streamUrl"] ?: data["url"])?.toString() ?: ""
+
             return Episode(
                 id = doc.id.ifEmpty { data["id"]?.toString() ?: "" },
                 movieId = data["movieId"]?.toString(),
-                seriesId = data["seriesId"]?.toString(),
-                title = data["title"]?.toString() ?: "",
-                episodeNumber = (data["episodeNumber"] as? Number)?.toInt() ?: 1,
-                seasonNumber = (data["seasonNumber"] as? Number)?.toInt() ?: 1,
+                seriesId = data["seriesId"]?.toString() ?: data["series_id"]?.toString(),
+                title = episodeTitle,
+                episodeNumber = (data["episodeNumber"] ?: data["episode_number"])?.let { (it as? Number)?.toInt() } ?: 1,
+                seasonNumber = (data["seasonNumber"] ?: data["season_number"])?.let { (it as? Number)?.toInt() } ?: 1,
                 overview = data["overview"]?.toString() ?: "",
-                stillPath = data["stillPath"]?.toString() ?: "",
-                streamUrl = data["streamUrl"]?.toString() ?: "",
+                stillPath = episodeStill,
+                airDate = (data["airDate"] ?: data["air_date"])?.toString(),
+                streamUrl = episodeStream,
                 playbackType = data["playbackType"]?.toString()?.trim()?.lowercase() ?: "",
                 embedCode = data["embedCode"]?.toString() ?: "",
                 runtime = (data["runtime"] as? Number)?.toInt(),
                 downloadEnabled = downloadEnabledVal,
+                narrated = narratedVal,
+                narrationLanguage = data["narrationLanguage"]?.toString(),
                 published = publishedVal,
                 createdAt = data["createdAt"],
                 updatedAt = data["updatedAt"]

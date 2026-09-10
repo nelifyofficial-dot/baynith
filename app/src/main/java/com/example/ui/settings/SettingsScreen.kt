@@ -160,6 +160,16 @@ fun SettingsScreen(
                             checked = uiState.autoPlay,
                             onCheckedChange = { viewModel.toggleAutoPlay(it) }
                         )
+
+                        SettingsDivider()
+
+                        SettingsSwitchRow(
+                            icon = Icons.Default.PlayCircleOutline,
+                            title = "Auto-skip Intro Segment",
+                            subtitle = "Automatically skip initial promotional intro in first 10 seconds",
+                            checked = uiState.autoSkipIntro,
+                            onCheckedChange = { viewModel.toggleAutoSkipIntro(it) }
+                        )
                     }
                 }
             }
