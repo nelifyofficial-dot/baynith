@@ -209,26 +209,9 @@ private fun NeliPlayExoPlayerContent(
 
     // Aggressive LoadControl ExoPlayer instance
     val exoPlayer = remember(context) {
-        val isEmulator = Build.HARDWARE.contains("goldfish") ||
-                Build.HARDWARE.contains("ranchu") ||
-                Build.MODEL.contains("google_sdk") ||
-                Build.PRODUCT.contains("sdk")
-
         val renderersFactory = DefaultRenderersFactory(context).apply {
             setEnableDecoderFallback(true)
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
-            if (isEmulator) {
-                setMediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
-                    val decoders = androidx.media3.exoplayer.mediacodec.MediaCodecUtil.getDecoderInfos(
-                        mimeType,
-                        requiresSecureDecoder,
-                        requiresTunnelingDecoder
-                    )
-                    decoders.sortedBy { decoder ->
-                        if (decoder.name.startsWith("c2.android.") || decoder.name.startsWith("OMX.google.")) 0 else 1
-                    }
-                }
-            }
         }
 
         // ExoPlayer DefaultLoadControl with aggressive buffering parameters
@@ -243,6 +226,34 @@ private fun NeliPlayExoPlayerContent(
                 playWhenReady = true
                 repeatMode = Player.REPEAT_MODE_OFF
             }
+    }
+
+    // Shared PlayerView instance to avoid surface destruction and codec renegotiation on orientation/fullscreen changes
+    val playerView = remember(exoPlayer) {
+        val view = android.view.LayoutInflater.from(context)
+            .inflate(com.example.R.layout.neliplay_player_view, null) as PlayerView
+        view.apply {
+            player = exoPlayer
+            useController = false
+        }
+    }
+
+    // Pause/Resume handling with Android Lifecycle
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, exoPlayer) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE,
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
+                    exoPlayer.pause()
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     // Cast synchronization
@@ -366,6 +377,7 @@ private fun NeliPlayExoPlayerContent(
         onDispose {
             NeliPlayNotificationManager.clearPlaybackNotification(context)
             viewModel.saveProgress(exoPlayer.currentPosition, exoPlayer.duration)
+            playerView.player = null
             exoPlayer.removeListener(listener)
             exoPlayer.stop()
             exoPlayer.release()
@@ -507,16 +519,13 @@ private fun NeliPlayExoPlayerContent(
                     .testTag("fullscreen_video_container")
             ) {
                 AndroidView(
-                    factory = { ctx ->
-                        val view = android.view.LayoutInflater.from(ctx)
-                            .inflate(com.example.R.layout.neliplay_player_view, null) as PlayerView
-                        view.apply {
-                            player = exoPlayer
-                            useController = false
-                            layoutParams = FrameLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
+                    factory = {
+                        (playerView.parent as? ViewGroup)?.removeView(playerView)
+                        playerView
+                    },
+                    update = { view ->
+                        if (view.player != exoPlayer) {
+                            view.player = exoPlayer
                         }
                     },
                     modifier = Modifier.fillMaxSize()
@@ -684,16 +693,13 @@ private fun NeliPlayExoPlayerContent(
                                 .testTag("neliplay_player_window")
                         ) {
                             AndroidView(
-                                factory = { ctx ->
-                                    val view = android.view.LayoutInflater.from(ctx)
-                                        .inflate(com.example.R.layout.neliplay_player_view, null) as PlayerView
-                                    view.apply {
-                                        player = exoPlayer
-                                        useController = false
-                                        layoutParams = FrameLayout.LayoutParams(
-                                            ViewGroup.LayoutParams.MATCH_PARENT,
-                                            ViewGroup.LayoutParams.MATCH_PARENT
-                                        )
+                                factory = {
+                                    (playerView.parent as? ViewGroup)?.removeView(playerView)
+                                    playerView
+                                },
+                                update = { view ->
+                                    if (view.player != exoPlayer) {
+                                        view.player = exoPlayer
                                     }
                                 },
                                 modifier = Modifier.fillMaxSize()

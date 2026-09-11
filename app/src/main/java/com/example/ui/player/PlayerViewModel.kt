@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 data class PlayerUiState(
@@ -169,7 +170,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
                         // Preload Next Episode in background automatically!
                         if (nextEp != null && nextEp.streamUrl.isNotBlank()) {
-                            EpisodePreloadManager.preloadNextEpisode(getApplication(), nextEp)
+                            withContext(Dispatchers.Main) {
+                                EpisodePreloadManager.preloadNextEpisode(getApplication(), nextEp)
+                            }
                         }
                     }
 
