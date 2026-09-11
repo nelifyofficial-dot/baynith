@@ -217,7 +217,8 @@ private fun NeliPlayExoPlayerContent(
         // ExoPlayer DefaultLoadControl with aggressive buffering parameters
         val loadControl = EpisodePreloadManager.buildAggressiveLoadControl()
         val httpSourceFactory = EpisodePreloadManager.createHttpDataSourceFactory()
-        val mediaSourceFactory = DefaultMediaSourceFactory(context).setDataSourceFactory(httpSourceFactory)
+        val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpSourceFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory)
 
         ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
