@@ -133,14 +133,20 @@ class MovieRepository {
      * Observes a single movie from Firestore at `movies/{movieId}`
      */
     fun getMovie(movieId: String): Flow<Movie?> = callbackFlow {
+        if (movieId.startsWith("ep_") || movieId.startsWith("episode_") || movieId.startsWith("ser_")) {
+            trySend(null)
+            close()
+            return@callbackFlow
+        }
         var listener: ListenerRegistration? = null
         try {
             listener = FirebaseManager.moviesCollection.document(movieId)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         val parsed = FirestoreErrorParser.parseError(error)
-                        Log.e(TAG, "Movie detail listener error for $movieId: $parsed")
+                        Log.w(TAG, "Movie detail listener note for $movieId: $parsed")
                         _lastError.value = parsed
+                        trySend(null)
                         return@addSnapshotListener
                     }
                     if (snapshot != null && snapshot.exists()) {

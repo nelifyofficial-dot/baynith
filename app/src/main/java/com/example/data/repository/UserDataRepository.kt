@@ -229,10 +229,11 @@ class UserDataRepository(context: Context) {
                     "movieId" to fav.movieId,
                     "title" to fav.title,
                     "posterPath" to fav.posterPath,
+                    "backdropPath" to fav.backdropPath,
                     "genres" to fav.genres,
                     "rating" to fav.rating,
                     "year" to fav.year,
-                    "addedAt" to fav.addedAt
+                    "addedAt" to fav.savedTimestamp
                 )
                 watchlistCollection.document(fav.movieId).set(favMap, SetOptions.merge()).await()
             }
@@ -243,20 +244,22 @@ class UserDataRepository(context: Context) {
                 val movieId = doc.id
                 val title = doc.getString("title") ?: ""
                 val posterPath = doc.getString("posterPath") ?: ""
+                val backdropPath = doc.getString("backdropPath") ?: ""
                 val genres = doc.getString("genres") ?: ""
                 val rating = doc.getDouble("rating") ?: 0.0
                 val year = doc.getLong("year")?.toInt()
                 val addedAt = doc.getLong("addedAt") ?: System.currentTimeMillis()
 
-                favoriteDao.insertFavorite(
+                favoriteDao.addFavorite(
                     FavoriteEntity(
                         movieId = movieId,
                         title = title,
                         posterPath = posterPath,
+                        backdropPath = backdropPath,
                         genres = genres,
                         rating = rating,
                         year = year,
-                        addedAt = addedAt
+                        savedTimestamp = addedAt
                     )
                 )
             }

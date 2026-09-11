@@ -342,7 +342,13 @@ fun NeliPlayApp(
                     contentId = contentId,
                     isLive = isLive,
                     viewModel = playerVm,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onMovieClick = { movieId ->
+                        navController.navigate(Screen.Player.createRoute(movieId, isLive = false))
+                    },
+                    onSearchClick = {
+                        navController.navigate(Screen.Search.route)
+                    }
                 )
             }
 

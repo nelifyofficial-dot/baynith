@@ -35,6 +35,7 @@ class MainActivity : FragmentActivity() {
 
         // Initialize NeliPlay notification channel
         NeliPlayNotificationManager.createNotificationChannel(this)
+        com.example.util.NeliNotificationManager.initChannels(this)
 
         // Request notification permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -67,7 +68,7 @@ class MainActivity : FragmentActivity() {
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
         val playId = intent.getStringExtra("EXTRA_PLAY_MOVIE_ID")
-        val navigateId = intent.getStringExtra("EXTRA_NAVIGATE_MOVIE_ID")
+        val navigateId = intent.getStringExtra("EXTRA_NAVIGATE_MOVIE_ID") ?: intent.getStringExtra("movieId")
         val showUpdate = intent.getBooleanExtra(com.example.update.manager.UpdateManager.EXTRA_SHOW_UPDATE_DIALOG, false)
         if (showUpdate) {
             showUpdateDialogOnStart = true

@@ -15,6 +15,7 @@ import androidx.credentials.exceptions.NoCredentialException
 import com.example.data.firebase.FirebaseManager
 import com.example.data.model.UserProfile
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
@@ -127,8 +128,13 @@ class AuthRepository {
                 .setNonce(hashedNonce)
                 .build()
 
+            val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(GOOGLE_WEB_CLIENT_ID)
+                .setNonce(hashedNonce)
+                .build()
+
             val request = GetCredentialRequest.Builder()
                 .addCredentialOption(googleIdOption)
+                .addCredentialOption(signInWithGoogleOption)
                 .build()
 
             val response = credentialManager.getCredential(context = launchContext, request = request)

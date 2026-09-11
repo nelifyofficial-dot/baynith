@@ -98,12 +98,18 @@ class SeriesRepository {
     }
 
     fun getSeriesById(seriesId: String): Flow<Series?> = callbackFlow {
+        if (seriesId.startsWith("mov_") || seriesId.startsWith("ep_") || seriesId.startsWith("episode_")) {
+            trySend(null)
+            close()
+            return@callbackFlow
+        }
         var listener: ListenerRegistration? = null
         try {
             listener = FirebaseManager.seriesCollection.document(seriesId)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        Log.w(TAG, "Series $seriesId detail listener error: ${error.message}")
+                        Log.w(TAG, "Series $seriesId detail listener note: ${error.message}")
+                        trySend(null)
                         return@addSnapshotListener
                     }
                     if (snapshot != null && snapshot.exists()) {

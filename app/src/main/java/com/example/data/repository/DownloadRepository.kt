@@ -207,6 +207,9 @@ class DownloadRepository(
             // Download completed successfully
             downloadDao.updateProgress(movieId, DownloadState.COMPLETED, 1.0f, currentBytes, currentBytes)
             Log.d(TAG, "Download completed: $movieId at ${file.absolutePath}")
+            val entity = downloadDao.getDownload(movieId)
+            val title = entity?.title ?: "Movie"
+            com.example.util.NeliNotificationManager.showDownloadCompletedNotification(context, movieId, title)
 
         } finally {
             try {

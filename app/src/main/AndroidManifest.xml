@@ -41,6 +41,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Home Screen App Widget -->
+        <receiver
+            android:name=".widget.NeliPlayWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/neliplay_widget_info" />
+        </receiver>
+
         <!-- Secure FileProvider for APK In-App Updates -->
         <provider
             android:name="androidx.core.content.FileProvider"

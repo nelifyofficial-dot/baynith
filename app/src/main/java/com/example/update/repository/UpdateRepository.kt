@@ -119,9 +119,23 @@ class UpdateRepository(private val context: Context) {
                 ) ?: return@withContext CheckResult.Error("Update package is currently unavailable. Please try again later.")
 
                 val currentCode = BuildConfig.VERSION_CODE
-                Log.d(TAG, "Installed versionCode: $currentCode, Remote versionCode: ${updateInfo.versionCode}")
+                val currentName = BuildConfig.VERSION_NAME
+                val versionComparison = compareSemanticVersions(updateInfo.versionName, currentName)
 
-                if (updateInfo.versionCode > currentCode) {
+                Log.d(TAG, "Installed: $currentName ($currentCode), Remote: ${updateInfo.versionName} (${updateInfo.versionCode}), comparison: $versionComparison")
+
+                // An update is genuinely available ONLY if:
+                // 1. Semantic version name is strictly newer than installed version name, OR
+                // 2. If semantic versions match, remote versionCode is strictly higher than installed versionCode
+                val isNewer = if (versionComparison > 0) {
+                    true
+                } else if (versionComparison == 0) {
+                    updateInfo.versionCode > currentCode
+                } else {
+                    false
+                }
+
+                if (isNewer) {
                     CheckResult.Available(updateInfo)
                 } else {
                     CheckResult.UpToDate
@@ -134,6 +148,22 @@ class UpdateRepository(private val context: Context) {
             Log.e(TAG, "Unexpected error evaluating release: ${e.message}", e)
             CheckResult.Error("Failed to process update information.")
         }
+    }
+
+    private fun compareSemanticVersions(v1: String, v2: String): Int {
+        val clean1 = v1.trim().removePrefix("v").removePrefix("V")
+        val clean2 = v2.trim().removePrefix("v").removePrefix("V")
+        if (clean1.equals(clean2, ignoreCase = true)) return 0
+
+        val parts1 = clean1.split(".").mapNotNull { it.filter { c -> c.isDigit() }.toIntOrNull() }
+        val parts2 = clean2.split(".").mapNotNull { it.filter { c -> c.isDigit() }.toIntOrNull() }
+        val maxLen = maxOf(parts1.size, parts2.size)
+        for (i in 0 until maxLen) {
+            val p1 = parts1.getOrElse(i) { 0 }
+            val p2 = parts2.getOrElse(i) { 0 }
+            if (p1 != p2) return p1.compareTo(p2)
+        }
+        return 0
     }
 
     /**

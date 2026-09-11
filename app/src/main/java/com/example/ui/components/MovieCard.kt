@@ -73,7 +73,7 @@ fun MovieCard(
         Card(
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = NeliSurface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             modifier = Modifier
                 .width(cardWidth.dp)
                 .height(cardHeight.dp)

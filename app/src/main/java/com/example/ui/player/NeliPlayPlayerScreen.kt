@@ -3,6 +3,7 @@ package com.example.ui.player
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Build
@@ -14,13 +15,16 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,31 +33,49 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Cast
-import androidx.compose.material.icons.filled.CastConnected
-import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FileDownloadDone
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material.icons.filled.Replay10
-import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -64,23 +86,22 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.cast.CastManager
-import com.example.cast.CastPlaybackState
-import com.example.cast.NeliPlayCastButton
-import com.example.util.NeliPlayNotificationManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -88,13 +109,27 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
-import com.example.ui.player.embed.NeliPlayEmbeddedPlayer
+import coil.compose.AsyncImage
+import com.example.cast.CastManager
+import com.example.cast.NeliPlayCastButton
+import com.example.data.local.entities.DownloadState
+import com.example.data.model.CastMember
+import com.example.data.model.Episode
+import com.example.data.model.Movie
+import com.example.ui.components.resolveBackdropUrl
+import com.example.ui.details.formatRuntime
 import com.example.ui.theme.NeliBluePrimary
 import com.example.ui.theme.NeliCyanAccent
-import com.example.ui.theme.NeliLiveRed
+import com.example.ui.theme.NeliGreenSuccess
+import com.example.ui.theme.NeliSurface
 import com.example.ui.theme.NeliSurfaceElevated
+import com.example.ui.theme.NeliTextSecondary
+import com.example.ui.theme.NeliVoid
+import com.example.util.NeliPlayNotificationManager
 import kotlinx.coroutines.delay
 import java.io.File
 import java.util.Locale
@@ -109,7 +144,7 @@ fun Context.findActivity(): Activity? {
 }
 
 fun formatDuration(ms: Long): String {
-    if (ms <= 0) return "00:00"
+    if (ms <= 0) return "0:00"
     val totalSeconds = ms / 1000
     val seconds = totalSeconds % 60
     val minutes = (totalSeconds / 60) % 60
@@ -117,7 +152,7 @@ fun formatDuration(ms: Long): String {
     return if (hours > 0) {
         String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
     } else {
-        String.format(Locale.US, "%02d:%02d", minutes, seconds)
+        String.format(Locale.US, "%d:%02d", minutes, seconds)
     }
 }
 
@@ -126,7 +161,9 @@ fun NeliPlayPlayerScreen(
     contentId: String,
     isLive: Boolean,
     viewModel: PlayerViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onMovieClick: (String) -> Unit = {},
+    onSearchClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -134,21 +171,14 @@ fun NeliPlayPlayerScreen(
         viewModel.loadMedia(contentId, isLive)
     }
 
-    if (uiState.isEmbed) {
-        NeliPlayEmbeddedPlayer(
-            embedCode = uiState.embedCode,
-            title = uiState.displayTitle,
-            onBack = onBack,
-            contentId = contentId
-        )
-    } else {
-        NeliPlayExoPlayerContent(
-            uiState = uiState,
-            viewModel = viewModel,
-            isLive = isLive,
-            onBack = onBack
-        )
-    }
+    NeliPlayExoPlayerContent(
+        uiState = uiState,
+        viewModel = viewModel,
+        isLive = isLive,
+        onBack = onBack,
+        onMovieClick = onMovieClick,
+        onSearchClick = onSearchClick
+    )
 }
 
 @OptIn(UnstableApi::class)
@@ -157,33 +187,36 @@ private fun NeliPlayExoPlayerContent(
     uiState: PlayerUiState,
     viewModel: PlayerViewModel,
     isLive: Boolean,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onMovieClick: (String) -> Unit,
+    onSearchClick: () -> Unit
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
 
     var isFullscreen by remember { mutableStateOf(false) }
-    var isControlsLocked by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(true) }
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(true) }
+    var isMuted by remember { mutableStateOf(false) }
     var playerError by remember { mutableStateOf<String?>(null) }
     var playbackPosition by remember { mutableLongStateOf(0L) }
     var playbackDuration by remember { mutableLongStateOf(0L) }
     var currentSpeed by remember { mutableFloatStateOf(1.0f) }
-    var selectedQuality by remember { mutableStateOf("720p") }
-    var hasSkippedIntro by remember { mutableStateOf(false) }
+    var selectedQuality by remember { mutableStateOf("1080p HD") }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    var showMenuOptions by remember { mutableStateOf(false) }
 
-    // Initialize ExoPlayer
+    // Aggressive LoadControl ExoPlayer instance
     val exoPlayer = remember(context) {
-        val isEmulator = android.os.Build.HARDWARE.contains("goldfish") ||
-                android.os.Build.HARDWARE.contains("ranchu") ||
-                android.os.Build.MODEL.contains("google_sdk") ||
-                android.os.Build.PRODUCT.contains("sdk")
+        val isEmulator = Build.HARDWARE.contains("goldfish") ||
+                Build.HARDWARE.contains("ranchu") ||
+                Build.MODEL.contains("google_sdk") ||
+                Build.PRODUCT.contains("sdk")
 
-        val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context).apply {
+        val renderersFactory = DefaultRenderersFactory(context).apply {
             setEnableDecoderFallback(true)
-            setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
             if (isEmulator) {
                 setMediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
                     val decoders = androidx.media3.exoplayer.mediacodec.MediaCodecUtil.getDecoderInfos(
@@ -191,47 +224,32 @@ private fun NeliPlayExoPlayerContent(
                         requiresSecureDecoder,
                         requiresTunnelingDecoder
                     )
-                    // Prioritize robust software decoders on emulator to avoid C2 hardware query failures
                     decoders.sortedBy { decoder ->
                         if (decoder.name.startsWith("c2.android.") || decoder.name.startsWith("OMX.google.")) 0 else 1
                     }
                 }
             }
         }
-        ExoPlayer.Builder(context, renderersFactory).build().apply {
-            playWhenReady = true
-            repeatMode = Player.REPEAT_MODE_OFF
-        }
+
+        // ExoPlayer DefaultLoadControl with aggressive buffering parameters
+        val loadControl = EpisodePreloadManager.buildAggressiveLoadControl()
+        val httpSourceFactory = EpisodePreloadManager.createHttpDataSourceFactory()
+        val mediaSourceFactory = DefaultMediaSourceFactory(context).setDataSourceFactory(httpSourceFactory)
+
+        ExoPlayer.Builder(context, renderersFactory)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .setLoadControl(loadControl)
+            .build().apply {
+                playWhenReady = true
+                repeatMode = Player.REPEAT_MODE_OFF
+            }
     }
 
-    fun performSkipIntro() {
-        if (hasSkippedIntro) return
-        hasSkippedIntro = true
-        val duration = exoPlayer.duration
-        val targetMs = if (duration > 0) {
-            300_000L.coerceAtMost((duration - 1000L).coerceAtLeast(0L))
-        } else {
-            300_000L
-        }
-        exoPlayer.seekTo(targetMs)
-        exoPlayer.play()
-    }
-
-    LaunchedEffect(uiState.autoSkipIntro, playbackPosition, isLive, hasSkippedIntro) {
-        if (!isLive && uiState.autoSkipIntro && !hasSkippedIntro && playbackPosition in 200L..10_000L) {
-            performSkipIntro()
-        }
-    }
-
+    // Cast synchronization
     val castManager = remember { CastManager.getInstance(context) }
     val isCasting by castManager.isCasting.collectAsStateWithLifecycle()
-    val castState by castManager.castState.collectAsStateWithLifecycle()
-    val castDeviceName by castManager.deviceName.collectAsStateWithLifecycle()
-    val castPosition by castManager.currentPositionMs.collectAsStateWithLifecycle()
-    val castDuration by castManager.durationMs.collectAsStateWithLifecycle()
     var wasCasting by remember { mutableStateOf(false) }
 
-    // Synchronize local player and Cast receiver seamlessly
     LaunchedEffect(isCasting) {
         if (isCasting && !wasCasting) {
             wasCasting = true
@@ -245,15 +263,11 @@ private fun NeliPlayExoPlayerContent(
             }
         } else if (!isCasting && wasCasting) {
             wasCasting = false
-            // User disconnected from TV; resume local playback if movie was playing
-            if (castPosition > 0 && !isLive) {
-                exoPlayer.seekTo(castPosition)
-                exoPlayer.play()
-            }
+            exoPlayer.play()
         }
     }
 
-    // Update notification metadata whenever media changes
+    // Notification metadata
     LaunchedEffect(uiState.movie, uiState.episode, uiState.tvChannel) {
         val movie = uiState.movie
         val episode = uiState.episode
@@ -263,7 +277,7 @@ private fun NeliPlayExoPlayerContent(
                 context = context,
                 title = movie.title,
                 subtitle = "NeliPlay Movie",
-                artworkUrl = movie.posterPath?.ifBlank { movie.backdropPath } ?: movie.backdropPath,
+                artworkUrl = movie.posterPath.ifBlank { movie.backdropPath },
                 contentId = movie.id,
                 isLive = false
             )
@@ -290,15 +304,15 @@ private fun NeliPlayExoPlayerContent(
         }
     }
 
-    // Auto-hide controls after 3.5 seconds
-    LaunchedEffect(showControls, isPlaying, isControlsLocked) {
-        if (showControls && isPlaying && !isControlsLocked) {
-            delay(3500)
+    // Controls auto-hide
+    LaunchedEffect(showControls, isPlaying) {
+        if (showControls && isPlaying) {
+            delay(4000)
             showControls = false
         }
     }
 
-    // Exit fullscreen on system back if fullscreen, else go back
+    // Back handler
     BackHandler {
         if (isFullscreen) {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -329,6 +343,11 @@ private fun NeliPlayExoPlayerContent(
                     Player.STATE_ENDED -> {
                         isBuffering = false
                         isPlaying = false
+                        // Automatically play next preloaded episode if available!
+                        val nextEp = uiState.nextEpisode
+                        if (nextEp != null && nextEp.streamUrl.isNotBlank()) {
+                            viewModel.loadMedia(nextEp.id, false)
+                        }
                     }
                     Player.STATE_IDLE -> {
                         isBuffering = false
@@ -354,7 +373,7 @@ private fun NeliPlayExoPlayerContent(
         }
     }
 
-    // Update position timer while playing
+    // Progress updates
     LaunchedEffect(isPlaying) {
         while (isPlaying) {
             playbackPosition = exoPlayer.currentPosition.coerceAtLeast(0L)
@@ -366,8 +385,8 @@ private fun NeliPlayExoPlayerContent(
         }
     }
 
-    // Prepare MediaItem when mediaUrl is ready
-    LaunchedEffect(uiState.mediaUrl) {
+    // Set MediaItem in ExoPlayer with aggressive playlist preloading
+    LaunchedEffect(uiState.mediaUrl, uiState.nextEpisode) {
         if (uiState.mediaUrl.isNotBlank()) {
             playerError = null
             isBuffering = true
@@ -378,17 +397,37 @@ private fun NeliPlayExoPlayerContent(
                 Uri.parse(uiState.mediaUrl)
             }
 
-            val mediaItemBuilder = MediaItem.Builder().setUri(uri)
-
-            // Explicitly set M3U8 MIME type for live HLS streams or m3u8 playback type
-            if (isLive || uiState.playbackType.equals("m3u8", ignoreCase = true) || uiState.mediaUrl.contains(".m3u8", ignoreCase = true)) {
-                mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
+            val mimeType = if (isLive || uiState.playbackType.equals("m3u8", ignoreCase = true) || uiState.mediaUrl.contains(".m3u8", ignoreCase = true)) {
+                MimeTypes.APPLICATION_M3U8
             } else {
-                mediaItemBuilder.setMimeType(MimeTypes.VIDEO_MP4)
+                MimeTypes.VIDEO_MP4
             }
 
-            val mediaItem = mediaItemBuilder.build()
-            exoPlayer.setMediaItem(mediaItem)
+            val currentItem = MediaItem.Builder()
+                .setUri(uri)
+                .setMimeType(mimeType)
+                .build()
+
+            exoPlayer.clearMediaItems()
+            exoPlayer.addMediaItem(currentItem)
+
+            // Add next episode to ExoPlayer playlist for preloading
+            val nextEp = uiState.nextEpisode
+            if (nextEp != null && nextEp.streamUrl.isNotBlank()) {
+                val nextUri = Uri.parse(nextEp.streamUrl)
+                val nextMime = if (nextEp.effectivePlaybackType.equals("m3u8", ignoreCase = true) || nextEp.streamUrl.contains(".m3u8", ignoreCase = true)) {
+                    MimeTypes.APPLICATION_M3U8
+                } else {
+                    MimeTypes.VIDEO_MP4
+                }
+                val nextItem = MediaItem.Builder()
+                    .setMediaId(nextEp.id)
+                    .setUri(nextUri)
+                    .setMimeType(nextMime)
+                    .build()
+                exoPlayer.addMediaItem(nextItem)
+            }
+
             if (uiState.initialPositionMs > 0 && !isLive) {
                 exoPlayer.seekTo(uiState.initialPositionMs)
             }
@@ -397,182 +436,138 @@ private fun NeliPlayExoPlayerContent(
         }
     }
 
+    // Fullscreen toggle logic
+    fun toggleFullscreen() {
+        if (isFullscreen) {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            isFullscreen = false
+        } else {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            isFullscreen = true
+        }
+    }
+
+    // Mute toggle
+    fun toggleMute() {
+        isMuted = !isMuted
+        exoPlayer.volume = if (isMuted) 0f else 1f
+    }
+
+    // Share action
+    fun shareContent() {
+        val shareTitle = uiState.displayTitle
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, shareTitle)
+            putExtra(Intent.EXTRA_TEXT, "Watch '$shareTitle' on NeliPlay: ${uiState.mediaUrl.ifBlank { "https://neliplay.com" }}")
+        }
+        context.startActivity(Intent.createChooser(shareIntent, "Share '$shareTitle'"))
+    }
+
+    val displayPoster = uiState.movie?.posterPath?.ifBlank { uiState.movie?.backdropPath }
+        ?: uiState.episode?.stillPath
+        ?: uiState.series?.posterPath
+        ?: ""
+
+    val movieYear = uiState.movie?.year?.toString()
+        ?: uiState.series?.year?.toString()
+        ?: "2022"
+
+    val movieRuntime = formatRuntime(uiState.movie?.runtime ?: uiState.episode?.runtime ?: 161)
+    val displayRuntime = if (movieRuntime.isNotBlank()) movieRuntime else "2h 41m"
+
+    val genresList = (uiState.movie?.genres ?: uiState.series?.genres ?: listOf("Action", "Adventure", "Drama", "Sci-Fi"))
+        .filter { it.isNotBlank() }
+        .ifEmpty { listOf("Action", "Adventure", "Drama", "Sci-Fi") }
+
+    val displayGenres = genresList.take(2).joinToString(" • ")
+
+    val movieOverview = uiState.movie?.overview?.ifBlank { null }
+        ?: uiState.episode?.overview?.ifBlank { null }
+        ?: uiState.series?.overview?.ifBlank { null }
+        ?: "After the death of King T'Challa, the people of Wakanda must face new threats and protect their nation from powerful enemies. A story of courage, unity and legacy continues."
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                showControls = !showControls
-            }
-            .testTag("neliplay_player_container")
+            .background(NeliVoid)
     ) {
-        // Player Surface
-        AndroidView(
-            factory = { ctx ->
-                val view = android.view.LayoutInflater.from(ctx)
-                    .inflate(com.example.R.layout.neliplay_player_view, null) as PlayerView
-                view.apply {
-                    player = exoPlayer
-                    useController = false
-                    layoutParams = FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-
-        // Buffering Indicator
-        if ((isBuffering || castState is CastPlaybackState.Buffering) && playerError == null && !isCasting) {
-            CircularProgressIndicator(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .size(52.dp),
-                color = NeliCyanAccent,
-                strokeWidth = 3.dp
-            )
-        }
-
-        // Casting overlay when actively casting to a remote TV
-        if (isCasting) {
+        if (isFullscreen) {
+            // Immersive Fullscreen Video Player
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.92f))
-                    .align(Alignment.Center),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CastConnected,
-                        contentDescription = "Casting to $castDeviceName",
-                        tint = NeliCyanAccent,
-                        modifier = Modifier.size(64.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Casting to ${castDeviceName ?: "Google Cast"}",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = when (castState) {
-                            is CastPlaybackState.Playing -> "Playing on TV"
-                            is CastPlaybackState.Paused -> "Paused on TV"
-                            is CastPlaybackState.Buffering -> "Buffering on TV..."
-                            is CastPlaybackState.Error -> (castState as CastPlaybackState.Error).message
-                            else -> "Connected to receiver"
-                        },
-                        color = NeliCyanAccent,
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(18.dp))
-                    Button(
-                        onClick = { castManager.disconnect() },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B1414)),
-                        shape = RoundedCornerShape(8.dp)
+                    .background(Color.Black)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
                     ) {
-                        Text("Disconnect", color = Color(0xFFFF5252), fontSize = 13.sp)
+                        showControls = !showControls
                     }
-                }
-            }
-        }
-
-        // Error Dialog / View
-        if (playerError != null || uiState.error != null) {
-            val msg = playerError ?: uiState.error ?: "Unable to play video."
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f)),
-                contentAlignment = Alignment.Center
+                    .testTag("fullscreen_video_container")
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Replay,
-                        contentDescription = "Retry",
-                        tint = NeliCyanAccent,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clickable {
-                                playerError = null
-                                exoPlayer.prepare()
-                                exoPlayer.play()
-                            }
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = msg,
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Tap to retry",
-                        color = NeliCyanAccent,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable {
-                            playerError = null
-                            exoPlayer.prepare()
-                            exoPlayer.play()
-                        }
-                    )
-                }
-            }
-        }
-
-        // Custom UI Controls Overlay
-        AnimatedVisibility(
-            visible = showControls,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color.Black.copy(alpha = 0.75f),
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.85f)
+                AndroidView(
+                    factory = { ctx ->
+                        val view = android.view.LayoutInflater.from(ctx)
+                            .inflate(com.example.R.layout.neliplay_player_view, null) as PlayerView
+                        view.apply {
+                            player = exoPlayer
+                            useController = false
+                            layoutParams = FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
                             )
-                        )
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Fullscreen Controls Overlay
+                AnimatedVisibility(
+                    visible = showControls,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    PlayerControlsOverlay(
+                        title = uiState.displayTitle,
+                        isLive = isLive,
+                        isPlaying = isPlaying,
+                        isBuffering = isBuffering,
+                        isMuted = isMuted,
+                        playbackPosition = playbackPosition,
+                        playbackDuration = playbackDuration,
+                        selectedQuality = selectedQuality,
+                        isFullscreen = true,
+                        onBack = { toggleFullscreen() },
+                        onPlayPause = {
+                            if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                        },
+                        onSeek = { targetMs ->
+                            exoPlayer.seekTo(targetMs)
+                        },
+                        onToggleMute = { toggleMute() },
+                        onToggleFullscreen = { toggleFullscreen() },
+                        onOpenSettings = { showSettingsDialog = true }
                     )
+                }
+            }
+        } else {
+            // Standard Layout: Top App Bar + Video Player + Scrollable Content
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
             ) {
-                // TOP BAR
+                // Top App Bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .align(Alignment.TopCenter),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
-                        onClick = {
-                            if (isFullscreen) {
-                                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                                isFullscreen = false
-                            } else {
-                                onBack()
-                            }
-                        }
+                        onClick = onBack,
+                        modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -581,292 +576,809 @@ private fun NeliPlayExoPlayerContent(
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
 
-                    val titleText = if (isLive) {
-                        uiState.tvChannel?.name ?: "Live TV"
-                    } else {
-                        uiState.displayTitle
-                    }
-
-                    Text(
-                        text = titleText,
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    if (isLive) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(NeliLiveRed)
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                text = "LIVE",
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                        }
-                    } else if (uiState.isOffline) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(NeliBluePrimary)
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                text = "OFFLINE",
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    NeliPlayCastButton(
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
-
-                // CENTER CONTROLS (Rewind, Play/Pause, Forward)
-                if (!isControlsLocked) {
-                    val isEffectivePlaying = if (isCasting) {
-                        castState is CastPlaybackState.Playing
-                    } else {
-                        isPlaying
-                    }
-
+                    // NeliPlay Logo
                     Row(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalArrangement = Arrangement.spacedBy(32.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
                     ) {
-                        if (!isLive) {
-                            IconButton(
-                                onClick = {
-                                    if (isCasting) {
-                                        val newPos = (castPosition - 10000).coerceAtLeast(0)
-                                        castManager.seekTo(newPos)
-                                    } else {
-                                        val newPos = (exoPlayer.currentPosition - 10000).coerceAtLeast(0)
-                                        exoPlayer.seekTo(newPos)
-                                    }
-                                },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Replay10,
-                                    contentDescription = "Rewind 10 seconds",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
-                        }
-
-                        // Play/Pause button
                         Box(
                             modifier = Modifier
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .background(NeliBluePrimary)
-                                .clickable {
-                                    if (isCasting) {
-                                        castManager.togglePlayPause()
-                                    } else {
-                                        if (exoPlayer.isPlaying) {
-                                            exoPlayer.pause()
-                                        } else {
-                                            exoPlayer.play()
-                                        }
-                                    }
-                                },
+                                .size(24.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Brush.linearGradient(listOf(NeliBluePrimary, NeliCyanAccent))),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = if (isEffectivePlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (isEffectivePlaying) "Pause" else "Play",
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
                                 tint = Color.White,
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "NeliPlay",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onSearchClick,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = Color.White
+                        )
+                    }
+
+                    NeliPlayCastButton()
+
+                    Box {
+                        IconButton(
+                            onClick = { showMenuOptions = !showMenuOptions },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "More",
+                                tint = Color.White
                             )
                         }
 
-                        if (!isLive) {
-                            IconButton(
+                        DropdownMenu(
+                            expanded = showMenuOptions,
+                            onDismissRequest = { showMenuOptions = false },
+                            modifier = Modifier.background(NeliSurfaceElevated)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Quality: $selectedQuality", color = Color.White) },
                                 onClick = {
-                                    if (isCasting) {
-                                        val newPos = (castPosition + 10000).coerceAtMost(castDuration)
-                                        castManager.seekTo(newPos)
-                                    } else {
-                                        val newPos = (exoPlayer.currentPosition + 10000).coerceAtMost(exoPlayer.duration)
-                                        exoPlayer.seekTo(newPos)
-                                    }
-                                },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Forward10,
-                                    contentDescription = "Forward 10 seconds",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
+                                    showMenuOptions = false
+                                    showSettingsDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Playback Speed: ${currentSpeed}x", color = Color.White) },
+                                onClick = {
+                                    showMenuOptions = false
+                                    showSettingsDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Share", color = Color.White) },
+                                onClick = {
+                                    showMenuOptions = false
+                                    shareContent()
+                                }
+                            )
                         }
                     }
                 }
 
-                // BOTTOM CONTROLS
-                Column(
+                // Scrollable View containing Video Player and Content Details
+                LazyColumn(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .fillMaxSize()
+                        .navigationBarsPadding(),
+                    contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
-                    if (!isLive && !isControlsLocked) {
-                        val activePosition = if (isCasting) castPosition else playbackPosition
-                        val activeDuration = if (isCasting) castDuration else playbackDuration
-
-                        // Slider Scrub Bar
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
+                    // Video Player Item
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(16f / 9f)
+                                .background(Color.Black)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    showControls = !showControls
+                                }
+                                .testTag("neliplay_player_window")
                         ) {
-                            Text(
-                                text = formatDuration(activePosition),
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-
-                            Slider(
-                                value = if (activeDuration > 0) {
-                                    (activePosition.toFloat() / activeDuration.toFloat()).coerceIn(0f, 1f)
-                                } else 0f,
-                                onValueChange = { fraction ->
-                                    val targetMs = (fraction * activeDuration).toLong()
-                                    if (isCasting) {
-                                        castManager.seekTo(targetMs)
-                                    } else {
-                                        playbackPosition = targetMs
-                                        exoPlayer.seekTo(targetMs)
+                            AndroidView(
+                                factory = { ctx ->
+                                    val view = android.view.LayoutInflater.from(ctx)
+                                        .inflate(com.example.R.layout.neliplay_player_view, null) as PlayerView
+                                    view.apply {
+                                        player = exoPlayer
+                                        useController = false
+                                        layoutParams = FrameLayout.LayoutParams(
+                                            ViewGroup.LayoutParams.MATCH_PARENT,
+                                            ViewGroup.LayoutParams.MATCH_PARENT
+                                        )
                                     }
                                 },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 8.dp),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = NeliCyanAccent,
-                                    activeTrackColor = NeliBluePrimary,
-                                    inactiveTrackColor = Color.White.copy(alpha = 0.25f)
-                                )
+                                modifier = Modifier.fillMaxSize()
                             )
 
-                            Text(
-                                text = formatDuration(activeDuration),
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            // Overlay Controls
+                            if (showControls) {
+                                PlayerControlsOverlay(
+                                    title = uiState.displayTitle,
+                                    isLive = isLive,
+                                    isPlaying = isPlaying,
+                                    isBuffering = isBuffering,
+                                    isMuted = isMuted,
+                                    playbackPosition = playbackPosition,
+                                    playbackDuration = playbackDuration,
+                                    selectedQuality = selectedQuality,
+                                    isFullscreen = false,
+                                    onBack = onBack,
+                                    onPlayPause = {
+                                        if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                    },
+                                    onSeek = { targetMs ->
+                                        exoPlayer.seekTo(targetMs)
+                                    },
+                                    onToggleMute = { toggleMute() },
+                                    onToggleFullscreen = { toggleFullscreen() },
+                                    onOpenSettings = { showSettingsDialog = true }
+                                )
+                            }
                         }
                     }
 
-                    // Bottom bar icons and quality pills
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Lock Controls Button
-                        IconButton(
-                            onClick = { isControlsLocked = !isControlsLocked }
-                        ) {
-                            Icon(
-                                imageVector = if (isControlsLocked) Icons.Default.Lock else Icons.Default.LockOpen,
-                                contentDescription = "Lock Screen",
-                                tint = if (isControlsLocked) NeliCyanAccent else Color.White
-                            )
-                        }
-
-                        if (!isControlsLocked) {
-                            // Speed button (cycles 1.0x -> 1.25x -> 1.5x -> 0.75x)
-                            Row(
+                    // Preload Indicator Banner for Next Episode
+                    if (uiState.nextEpisode != null) {
+                        item {
+                            val nextEp = uiState.nextEpisode!!
+                            Surface(
+                                color = NeliBluePrimary.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(NeliSurfaceElevated)
-                                    .clickable {
-                                        val nextSpeed = when (currentSpeed) {
-                                            0.75f -> 1.0f
-                                            1.0f -> 1.25f
-                                            1.25f -> 1.5f
-                                            1.5f -> 2.0f
-                                            else -> 0.75f
-                                        }
-                                        currentSpeed = nextSpeed
-                                        exoPlayer.playbackParameters = PlaybackParameters(nextSpeed)
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Speed,
-                                    contentDescription = "Speed",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "${currentSpeed}x",
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Bolt,
+                                        contentDescription = "Preload",
+                                        tint = NeliCyanAccent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Next: Episode ${nextEp.episodeNumber} • ${nextEp.title.ifBlank { "Next Episode" }}",
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = if (uiState.isNextEpisodePreloaded) "Instant playback pre-buffered" else "Preloading in background...",
+                                            color = NeliCyanAccent,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { viewModel.loadMedia(nextEp.id, false) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.SkipNext,
+                                            contentDescription = "Play Next",
+                                            tint = NeliCyanAccent
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Movie Info Row: Poster on Left, Title/Metadata/Synopsis on Right
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp)
+                        ) {
+                            // Poster Thumbnail
+                            Box(
+                                modifier = Modifier
+                                    .width(95.dp)
+                                    .height(140.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(NeliSurfaceElevated)
+                                    .shadow(elevation = 6.dp, shape = RoundedCornerShape(10.dp))
+                            ) {
+                                AsyncImage(
+                                    model = displayPoster,
+                                    contentDescription = uiState.displayTitle,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
                                 )
                             }
 
-                            // Quality pills
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf("Auto", "720p", "1080p").forEach { quality ->
-                                    val isSelected = selectedQuality == quality
+                            Spacer(modifier = Modifier.width(14.dp))
+
+                            // Details Column
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = uiState.displayTitle,
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                // Metadata Row: HD badge, 2022, Action, Adventure, 2h 41m
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    // HD pill
                                     Box(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(if (isSelected) NeliBluePrimary else NeliSurfaceElevated)
-                                            .clickable { selectedQuality = quality }
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(NeliBluePrimary)
+                                            .padding(horizontal = 5.dp, vertical = 2.dp)
                                     ) {
                                         Text(
-                                            text = quality,
+                                            text = "HD",
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(text = movieYear, color = NeliTextSecondary, fontSize = 12.sp)
+
+                                    if (displayGenres.isNotBlank()) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(text = "•", color = NeliTextSecondary, fontSize = 10.sp)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(text = displayGenres, color = NeliTextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(text = "•", color = NeliTextSecondary, fontSize = 10.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(text = displayRuntime, color = NeliTextSecondary, fontSize = 12.sp)
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // Synopsis Overview
+                                Text(
+                                    text = movieOverview,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = 12.sp,
+                                    lineHeight = 17.sp,
+                                    maxLines = 4,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
+                    // Action Buttons Row: Play, Watchlist, Download, Share
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // 1. Play Button
+                            Button(
+                                onClick = {
+                                    if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                },
+                                shape = RoundedCornerShape(24.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeliBluePrimary),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                modifier = Modifier
+                                    .weight(1.1f)
+                                    .height(42.dp)
+                                    .testTag("action_play_button")
+                            ) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = "Play",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isPlaying) "Pause" else "Play",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+
+                            // 2. Watchlist Button
+                            Button(
+                                onClick = { viewModel.toggleFavorite() },
+                                shape = RoundedCornerShape(24.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeliSurfaceElevated),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                                modifier = Modifier
+                                    .weight(1.1f)
+                                    .height(42.dp)
+                                    .testTag("action_watchlist_button")
+                            ) {
+                                Icon(
+                                    imageVector = if (uiState.isFavorite) Icons.Default.Check else Icons.Default.Add,
+                                    contentDescription = "Watchlist",
+                                    tint = if (uiState.isFavorite) NeliCyanAccent else Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (uiState.isFavorite) "Saved" else "Watchlist",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 12.sp
+                                )
+                            }
+
+                            // 3. Download Button
+                            Button(
+                                onClick = { viewModel.startDownload() },
+                                shape = RoundedCornerShape(24.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeliSurfaceElevated),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                                modifier = Modifier
+                                    .weight(1.1f)
+                                    .height(42.dp)
+                                    .testTag("action_download_button")
+                            ) {
+                                val isDownloaded = uiState.downloadEntity?.status == DownloadState.COMPLETED
+                                Icon(
+                                    imageVector = if (isDownloaded) Icons.Default.FileDownloadDone else Icons.Default.Download,
+                                    contentDescription = "Download",
+                                    tint = if (isDownloaded) NeliGreenSuccess else Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isDownloaded) "Ready" else "Download",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 11.sp
+                                )
+                            }
+
+                            // 4. Share Button
+                            Button(
+                                onClick = { shareContent() },
+                                shape = RoundedCornerShape(24.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeliSurfaceElevated),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp)
+                                    .testTag("action_share_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "Share",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Share",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+
+                    // Cast & Crew Section
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Cast & Crew",
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.clickable { /* See All */ }
+                                ) {
+                                    Text(
+                                        text = "See All",
+                                        color = NeliCyanAccent,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = "See All",
+                                        tint = NeliCyanAccent,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                items(uiState.castMembers) { cast ->
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.width(74.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(60.dp)
+                                                .clip(CircleShape)
+                                                .background(NeliSurfaceElevated)
+                                        ) {
+                                            AsyncImage(
+                                                model = cast.profileUrl,
+                                                contentDescription = cast.name,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = cast.name,
                                             color = Color.White,
                                             fontSize = 11.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            fontWeight = FontWeight.SemiBold,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = cast.role,
+                                            color = NeliTextSecondary,
+                                            fontSize = 10.sp,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // About This Movie Section
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 18.dp)
+                        ) {
+                            Text(
+                                text = "About This Movie",
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // 3 Info Cards Row: Release Date, Language, Subtitles
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // 1. Release Date Card
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(NeliSurfaceElevated)
+                                        .padding(10.dp)
+                                ) {
+                                    Column {
+                                        Icon(
+                                            imageVector = Icons.Default.CalendarToday,
+                                            contentDescription = "Release Date",
+                                            tint = NeliCyanAccent,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(text = "Release Date", color = NeliTextSecondary, fontSize = 10.sp)
+                                        Text(
+                                            text = uiState.movie?.releaseDate ?: "Nov 11, 2022",
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+
+                                // 2. Language Card
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(NeliSurfaceElevated)
+                                        .padding(10.dp)
+                                ) {
+                                    Column {
+                                        Icon(
+                                            imageVector = Icons.Default.Translate,
+                                            contentDescription = "Language",
+                                            tint = NeliCyanAccent,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(text = "Language", color = NeliTextSecondary, fontSize = 10.sp)
+                                        Text(
+                                            text = uiState.movie?.audioLanguage ?: "English",
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+
+                                // 3. Subtitles Card
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1.2f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(NeliSurfaceElevated)
+                                        .padding(10.dp)
+                                ) {
+                                    Column {
+                                        Icon(
+                                            imageVector = Icons.Default.ClosedCaption,
+                                            contentDescription = "Subtitles",
+                                            tint = NeliCyanAccent,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(text = "Subtitles", color = NeliTextSecondary, fontSize = 10.sp)
+                                        Text(
+                                            text = "English, Swahili, French and more",
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
                             }
 
-                            // Fullscreen / Landscape Toggle
-                            IconButton(
-                                onClick = {
-                                    isFullscreen = !isFullscreen
-                                    if (isFullscreen) {
-                                        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                                    } else {
-                                        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Genre Chips
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                genresList.forEach { genre ->
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(NeliSurfaceElevated)
+                                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = genre,
+                                            color = Color.White.copy(alpha = 0.9f),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
                                     }
                                 }
+                            }
+                        }
+                    }
+
+                    // If Series: Episodes List
+                    if (uiState.episodes.isNotEmpty()) {
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
                             ) {
-                                Icon(
-                                    imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                    contentDescription = "Fullscreen",
-                                    tint = Color.White
+                                Text(
+                                    text = "Episodes",
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // Season Tabs
+                                if (uiState.seasons.size > 1) {
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(uiState.seasons) { sNum ->
+                                            val isSel = sNum == uiState.selectedSeason
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(if (isSel) NeliBluePrimary else NeliSurfaceElevated)
+                                                    .clickable { viewModel.selectSeason(sNum) }
+                                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Season $sNum",
+                                                    color = Color.White,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                }
+
+                                uiState.currentSeasonEpisodes.forEach { ep ->
+                                    val isCurrent = ep.id == uiState.episode?.id
+                                    Surface(
+                                        color = if (isCurrent) NeliBluePrimary.copy(alpha = 0.2f) else NeliSurfaceElevated,
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp)
+                                            .clickable { viewModel.loadMedia(ep.id, false) }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "${ep.episodeNumber}",
+                                                color = if (isCurrent) NeliCyanAccent else Color.White,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.width(28.dp)
+                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = ep.title.ifBlank { "Episode ${ep.episodeNumber}" },
+                                                    color = Color.White,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                                if (ep.runtime != null && ep.runtime > 0) {
+                                                    Text(
+                                                        text = "${ep.runtime}m",
+                                                        color = NeliTextSecondary,
+                                                        fontSize = 11.sp
+                                                    )
+                                                }
+                                            }
+                                            if (uiState.nextEpisode?.id == ep.id && uiState.isNextEpisodePreloaded) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(NeliCyanAccent.copy(alpha = 0.2f))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Preloaded",
+                                                        color = NeliCyanAccent,
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                            IconButton(onClick = { viewModel.loadMedia(ep.id, false) }) {
+                                                Icon(
+                                                    imageVector = if (isCurrent && isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                    contentDescription = "Play",
+                                                    tint = if (isCurrent) NeliCyanAccent else Color.White
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // More Like This Section
+                    if (uiState.moreLikeThis.isNotEmpty()) {
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "More Like This",
+                                        color = Color.White,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = "More",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    items(uiState.moreLikeThis) { simMovie ->
+                                        Column(
+                                            modifier = Modifier
+                                                .width(110.dp)
+                                                .clickable {
+                                                    viewModel.loadMedia(simMovie.id, false)
+                                                    onMovieClick(simMovie.id)
+                                                }
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(155.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(NeliSurfaceElevated)
+                                            ) {
+                                                AsyncImage(
+                                                    model = simMovie.posterPath.ifBlank { simMovie.backdropPath },
+                                                    contentDescription = simMovie.title,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = simMovie.title,
+                                                color = Color.White,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -874,36 +1386,256 @@ private fun NeliPlayExoPlayerContent(
             }
         }
 
-        // Temporary Skip Intro/Promo Segment button (First 10s: 0:00 -> 0:10)
-        if (!isLive && !hasSkippedIntro && playbackPosition in 0L..10_000L && playerError == null && !isCasting) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = if (showControls) 96.dp else 36.dp, end = 24.dp)
-            ) {
-                Surface(
-                    onClick = { performSkipIntro() },
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color.Black.copy(alpha = 0.85f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeliCyanAccent),
-                    modifier = Modifier.testTag("skip_intro_button")
+        // Settings Dialog (Quality & Speed)
+        if (showSettingsDialog) {
+            AlertDialog(
+                onDismissRequest = { showSettingsDialog = false },
+                title = { Text("Playback Settings", color = Color.White, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Stream Quality", color = NeliCyanAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        listOf("1080p HD", "720p HD", "480p SD", "Auto (Dynamic)").forEach { q ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedQuality = q }
+                            ) {
+                                RadioButton(
+                                    selected = selectedQuality == q,
+                                    onClick = { selectedQuality = q },
+                                    colors = RadioButtonDefaults.colors(selectedColor = NeliCyanAccent)
+                                )
+                                Text(text = q, color = Color.White, fontSize = 13.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Playback Speed", color = NeliCyanAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(top = 6.dp)
+                        ) {
+                            listOf(0.75f, 1.0f, 1.25f, 1.5f).forEach { speed ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (currentSpeed == speed) NeliBluePrimary else NeliSurfaceElevated)
+                                        .clickable {
+                                            currentSpeed = speed
+                                            exoPlayer.playbackParameters = PlaybackParameters(speed)
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "${speed}x",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showSettingsDialog = false }) {
+                        Text("Done", color = NeliCyanAccent, fontWeight = FontWeight.Bold)
+                    }
+                },
+                containerColor = NeliSurfaceElevated
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlayerControlsOverlay(
+    title: String,
+    isLive: Boolean,
+    isPlaying: Boolean,
+    isBuffering: Boolean,
+    isMuted: Boolean,
+    playbackPosition: Long,
+    playbackDuration: Long,
+    selectedQuality: String,
+    isFullscreen: Boolean,
+    onBack: () -> Unit,
+    onPlayPause: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onToggleMute: () -> Unit,
+    onToggleFullscreen: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color.Black.copy(alpha = 0.7f),
+                        Color.Transparent,
+                        Color.Black.copy(alpha = 0.85f)
+                    )
+                )
+            )
+    ) {
+        // Top Bar: HD badge on Left, Cast & Fullscreen/PiP on Right
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isFullscreen) {
+                IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Exit Fullscreen",
+                        tint = Color.White
+                    )
+                }
+            } else {
+                // HD badge pill
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                    ) {
-                        Text(
-                            text = "Skip Intro",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    Text(
+                        text = "HD",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                NeliPlayCastButton()
+                IconButton(onClick = onToggleFullscreen, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.PictureInPictureAlt,
+                        contentDescription = "Expand",
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+
+        // Center Play / Pause button
+        Box(
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            if (isBuffering) {
+                CircularProgressIndicator(
+                    color = NeliCyanAccent,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.size(48.dp)
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .clickable { onPlayPause() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+        }
+
+        // Bottom Controls Bar: Progress bar, time, mute, settings, fullscreen
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            // Slider / Progress bar
+            var isDragging by remember { mutableStateOf(false) }
+            var dragPosition by remember { mutableFloatStateOf(0f) }
+
+            val totalDur = playbackDuration.coerceAtLeast(1L)
+            val currentPos = if (isDragging) (dragPosition * totalDur).toLong() else playbackPosition
+
+            if (!isLive) {
+                Slider(
+                    value = if (totalDur > 0) (currentPos.toFloat() / totalDur.toFloat()).coerceIn(0f, 1f) else 0f,
+                    onValueChange = { frac ->
+                        isDragging = true
+                        dragPosition = frac
+                    },
+                    onValueChangeFinished = {
+                        val targetMs = (dragPosition * totalDur).toLong()
+                        onSeek(targetMs)
+                        isDragging = false
+                    },
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color.White,
+                        activeTrackColor = NeliCyanAccent,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.25f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(20.dp)
+                )
+            }
+
+            // Bottom row: Time counter and right control icons
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Time counter e.g. "0:00 / 2:41:15"
+                Text(
+                    text = if (isLive) "LIVE" else "${formatDuration(currentPos)} / ${formatDuration(playbackDuration)}",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Mute / Unmute
+                    IconButton(onClick = onToggleMute, modifier = Modifier.size(32.dp)) {
                         Icon(
-                            imageVector = Icons.Default.Forward10,
-                            contentDescription = "Skip to 5:00",
-                            tint = NeliCyanAccent,
+                            imageVector = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = "Volume",
+                            tint = Color.White,
                             modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    // Settings
+                    IconButton(onClick = onOpenSettings, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    // Fullscreen Toggle
+                    IconButton(onClick = onToggleFullscreen, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = "Fullscreen",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }

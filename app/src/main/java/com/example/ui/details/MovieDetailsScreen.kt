@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,12 +40,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +69,7 @@ import com.example.ui.components.EmptyStateView
 import com.example.ui.components.MovieCard
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.resolveBackdropUrl
+import com.example.ui.series.EpisodeItemRow
 import com.example.ui.theme.NeliBluePrimary
 import com.example.ui.theme.NeliCyanAccent
 import com.example.ui.theme.NeliGreenSuccess
@@ -92,6 +100,8 @@ fun MovieDetailsScreen(
     }
 
     val uiState by viewModel.uiState.collectAsState()
+    var showQualityDialog by remember { mutableStateOf(false) }
+    var selectedQuality by remember { mutableStateOf("1080p") }
 
     Scaffold(
         containerColor = NeliVoid,
@@ -123,6 +133,11 @@ fun MovieDetailsScreen(
         } else {
             val movie = uiState.movie!!
             val download = uiState.downloadEntity
+            val targetPlayId = if (uiState.hasEpisodes && uiState.currentSeasonEpisodes.isNotEmpty()) {
+                uiState.currentSeasonEpisodes.first().id
+            } else {
+                movie.id
+            }
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -195,7 +210,7 @@ fun MovieDetailsScreen(
                                 .size(64.dp)
                                 .clip(CircleShape)
                                 .background(NeliBluePrimary)
-                                .clickable { onWatchClick(movie.id) }
+                                .clickable { onWatchClick(targetPlayId) }
                                 .testTag("details_center_play_button"),
                             contentAlignment = Alignment.Center
                         ) {
@@ -335,7 +350,7 @@ fun MovieDetailsScreen(
                         ) {
                             // Watch Button
                             Button(
-                                onClick = { onWatchClick(movie.id) },
+                                onClick = { onWatchClick(targetPlayId) },
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = NeliBluePrimary),
                                 modifier = Modifier
@@ -421,7 +436,7 @@ fun MovieDetailsScreen(
                                     }
                                     else -> {
                                         Button(
-                                            onClick = { viewModel.startDownload() },
+                                            onClick = { showQualityDialog = true },
                                             shape = RoundedCornerShape(10.dp),
                                             colors = ButtonDefaults.buttonColors(containerColor = NeliSurfaceElevated),
                                             modifier = Modifier
@@ -554,6 +569,77 @@ fun MovieDetailsScreen(
                     }
                 }
 
+                // Episodes Section (for series or episodic movies like Squid Game)
+                if (uiState.hasEpisodes) {
+                    item {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = "Episodes",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 20.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            if (uiState.seasons.isNotEmpty()) {
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 20.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    items(uiState.seasons) { seasonNum ->
+                                        val isSelected = uiState.selectedSeason == seasonNum
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (isSelected) NeliBluePrimary else NeliSurfaceElevated)
+                                                .clickable { viewModel.selectSeason(seasonNum) }
+                                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                                                .testTag("details_season_$seasonNum")
+                                        ) {
+                                            Text(
+                                                text = "Season $seasonNum",
+                                                color = if (isSelected) Color.White else NeliTextSecondary,
+                                                fontSize = 13.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+                        }
+                    }
+
+                    if (uiState.currentSeasonEpisodes.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No episodes available for Season ${uiState.selectedSeason}.",
+                                    color = NeliTextSecondary,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    } else {
+                        items(uiState.currentSeasonEpisodes, key = { it.id }) { ep ->
+                            EpisodeItemRow(
+                                episode = ep,
+                                onClick = { onWatchClick(ep.id) }
+                            )
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
+                }
+
                 // Similar Movies / More Like This
                 if (uiState.similarMovies.isNotEmpty()) {
                     item {
@@ -573,5 +659,66 @@ fun MovieDetailsScreen(
                 }
             }
         }
+    }
+
+    if (showQualityDialog) {
+        val qualities = listOf(
+            "1080p" to "High Quality (1080p - Best visual experience)",
+            "720p" to "Standard (720p - Balanced storage & quality)",
+            "480p" to "Data Saver (480p - Faster download, less space)"
+        )
+        AlertDialog(
+            onDismissRequest = { showQualityDialog = false },
+            containerColor = NeliSurfaceElevated,
+            title = {
+                Text(
+                    text = "Download Quality",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    qualities.forEach { (qKey, qLabel) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedQuality = qKey }
+                                .padding(vertical = 10.dp)
+                        ) {
+                            RadioButton(
+                                selected = (selectedQuality == qKey),
+                                onClick = { selectedQuality = qKey },
+                                colors = RadioButtonDefaults.colors(selectedColor = NeliCyanAccent)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = qLabel,
+                                color = if (selectedQuality == qKey) Color.White else NeliTextSecondary,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showQualityDialog = false
+                        viewModel.startDownload(selectedQuality)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeliBluePrimary)
+                ) {
+                    Text("Start Download", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showQualityDialog = false }) {
+                    Text("Cancel", color = NeliTextSecondary)
+                }
+            }
+        )
     }
 }
