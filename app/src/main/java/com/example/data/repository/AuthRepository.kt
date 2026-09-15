@@ -115,26 +115,14 @@ class AuthRepository {
             val launchContext = activity ?: context
             val credentialManager = CredentialManager.create(launchContext)
 
-            val rawNonce = UUID.randomUUID().toString()
-            val bytes = rawNonce.toByteArray()
-            val md = MessageDigest.getInstance("SHA-256")
-            val digest = md.digest(bytes)
-            val hashedNonce = digest.fold("") { str, it -> str + "%02x".format(it) }
-
             val googleIdOption = GetGoogleIdOption.Builder()
                 .setFilterByAuthorizedAccounts(false)
                 .setServerClientId(GOOGLE_WEB_CLIENT_ID)
                 .setAutoSelectEnabled(false)
-                .setNonce(hashedNonce)
-                .build()
-
-            val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(GOOGLE_WEB_CLIENT_ID)
-                .setNonce(hashedNonce)
                 .build()
 
             val request = GetCredentialRequest.Builder()
                 .addCredentialOption(googleIdOption)
-                .addCredentialOption(signInWithGoogleOption)
                 .build()
 
             val response = credentialManager.getCredential(context = launchContext, request = request)
@@ -154,6 +142,19 @@ class AuthRepository {
 
                     Result.success(user)
                 }
+                credential is CustomCredential -> {
+                    val idToken = credential.data.getString("androidx.credentials.BUNDLE_KEY_ID_TOKEN")
+                        ?: credential.data.getString("id_token")
+                    if (!idToken.isNullOrBlank()) {
+                        val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
+                        val authResult = auth.signInWithCredential(firebaseCredential).await()
+                        val user = authResult.user ?: throw Exception("Firebase user is null after sign in.")
+                        syncUserProfile(user)
+                        Result.success(user)
+                    } else {
+                        Result.failure(Exception("Could not extract Google ID Token."))
+                    }
+                }
                 else -> {
                     Result.failure(Exception("Unrecognized credential type: ${credential.type}"))
                 }
@@ -163,10 +164,19 @@ class AuthRepository {
             Result.failure(Exception("Sign-in canceled"))
         } catch (e: NoCredentialException) {
             Log.w(TAG, "No Google accounts found: ${e.message}")
-            Result.failure(Exception("No Google accounts found on this device. Please add a Google account in Android Settings or try Guest Mode."))
+            Result.failure(Exception("No Google accounts found on device. Tap Instant Quick Sign-In below."))
         } catch (e: GetCredentialException) {
             Log.e(TAG, "Credential Manager error: ${e.message}", e)
-            Result.failure(Exception("Google Sign-In failed: ${e.message}"))
+            val errText = e.message ?: ""
+            val userFriendlyMessage = when {
+                errText.contains("16") || errText.contains("Developer error", ignoreCase = true) || errText.contains("SHA", ignoreCase = true) ->
+                    "Google Play Services: App SHA-1 (B9:46:68:CC:91:60:8F:DC:0E:0F:6A:EB:09:1C:A6:1B:64:7E:C8:92) needs to be registered in Firebase Console. You can use Instant Quick Sign-In below!"
+                errText.contains("cancel", ignoreCase = true) ->
+                    "Sign-in canceled"
+                else ->
+                    "Google Sign-In failed (${e.message}). You can use Instant Quick Sign-In."
+            }
+            Result.failure(Exception(userFriendlyMessage))
         } catch (e: Exception) {
             Log.e(TAG, "Google sign-in error: ${e.message}", e)
             Result.failure(e)

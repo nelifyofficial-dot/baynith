@@ -48,8 +48,8 @@ object EpisodePreloadManager {
             .setBufferDurationsMs(
                 /* minBufferMs = */ 15_000,
                 /* maxBufferMs = */ 50_000,
-                /* bufferForPlaybackMs = */ 500, // Aggressive 500ms playback start!
-                /* bufferForPlaybackAfterRebufferMs = */ 1_000
+                /* bufferForPlaybackMs = */ 1_500, // Smooth playback start with sufficient pre-buffered keyframes
+                /* bufferForPlaybackAfterRebufferMs = */ 2_500
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .setBackBuffer(/* backBufferDurationMs = */ 10_000, /* retainBackBufferFromKeyframe = */ true)

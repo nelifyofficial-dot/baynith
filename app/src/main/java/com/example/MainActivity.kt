@@ -33,6 +33,13 @@ class MainActivity : FragmentActivity() {
         // Prewarm WebView cache directory structure to prevent Chromium ENOENT directory scan errors
         com.example.ui.player.embed.NeliPlayEmbedUtils.prewarmWebViewEnvironment(this)
 
+        // Initialize Google Mobile Ads SDK (AdMob)
+        try {
+            com.google.android.gms.ads.MobileAds.initialize(this) {}
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "MobileAds initialization error: ${e.message}")
+        }
+
         // Initialize NeliPlay notification channel
         NeliPlayNotificationManager.createNotificationChannel(this)
         com.example.util.NeliNotificationManager.initChannels(this)

@@ -45,6 +45,7 @@ data class PlayerUiState(
     val isSwahiliNarrated: Boolean = false,
     val initialPositionMs: Long = 0L,
     val isFavorite: Boolean = false,
+    val isWatchLater: Boolean = false,
     val downloadEntity: DownloadEntity? = null,
     val castMembers: List<CastMember> = emptyList(),
     val moreLikeThis: List<Movie> = emptyList(),
@@ -52,11 +53,13 @@ data class PlayerUiState(
     val selectedSeason: Int = 1,
     val episodes: List<Episode> = emptyList(),
     val currentSeasonEpisodes: List<Episode> = emptyList(),
+    val previousEpisode: Episode? = null,
     val nextEpisode: Episode? = null,
     val isNextEpisodePreloaded: Boolean = false,
     val error: String? = null
 ) {
     val isEmbed: Boolean get() = playbackType.equals("embed", ignoreCase = true) && mediaUrl.isBlank()
+    val isSeries: Boolean get() = series != null || episode != null || seasons.isNotEmpty()
     val displayTitle: String get() = movie?.title ?: episode?.title ?: tvChannel?.name ?: "NeliPlay"
 }
 
@@ -120,6 +123,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     val downloadDeferred = async { downloadDao.getDownload(contentId) }
                     val progressDeferred = async { userDataRepo.getProgress(contentId) }
                     val isFavDeferred = async { userDataRepo.isFavorite(contentId).firstOrNull() ?: false }
+                    val isWatchLaterDeferred = async { userDataRepo.isWatchLater(contentId).firstOrNull() ?: false }
                     val allMoviesDeferred = async { movieRepo.getPublishedMovies().firstOrNull() ?: emptyList() }
 
                     val isMovieId = contentId.startsWith("mov_")
@@ -135,6 +139,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     val download = downloadDeferred.await()
                     val savedProgress = progressDeferred.await()
                     val isFav = isFavDeferred.await()
+                    val isWatchLater = isWatchLaterDeferred.await()
                     val allMovies = allMoviesDeferred.await()
                     val movie = movieDeferred.await()
                     val episode = episodeDeferred.await()
@@ -147,6 +152,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     var fetchedSeriesName: String? = null
                     var seriesEpisodes: List<Episode> = emptyList()
                     var nextEp: Episode? = null
+                    var prevEp: Episode? = null
 
                     if (episode != null) {
                         val sId = episode.seriesId ?: episode.movieId
@@ -159,7 +165,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             }
                         }
 
-                        // Determine Next Episode in the series
+                        // Determine Next and Previous Episode in the series
                         val currentSeasonNum = episode.seasonNumber
                         val currentEpNum = episode.episodeNumber
                         nextEp = seriesEpisodes.firstOrNull {
@@ -167,6 +173,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         } ?: seriesEpisodes.firstOrNull {
                             it.seasonNumber == currentSeasonNum + 1 && it.episodeNumber == 1
                         }
+
+                        prevEp = seriesEpisodes.lastOrNull {
+                            it.seasonNumber == currentSeasonNum && it.episodeNumber == currentEpNum - 1
+                        } ?: seriesEpisodes.filter { it.seasonNumber == currentSeasonNum - 1 }.maxByOrNull { it.episodeNumber }
 
                         // Preload Next Episode in background automatically!
                         if (nextEp != null && nextEp.streamUrl.isNotBlank()) {
@@ -205,6 +215,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             isSwahiliNarrated = isSwahili,
                             initialPositionMs = resumePosition,
                             isFavorite = isFav,
+                            isWatchLater = isWatchLater,
                             downloadEntity = download,
                             castMembers = cast,
                             moreLikeThis = similar
@@ -231,6 +242,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             isSwahiliNarrated = isSwahili,
                             initialPositionMs = resumePosition,
                             isFavorite = isFav,
+                            isWatchLater = isWatchLater,
                             downloadEntity = download,
                             castMembers = cast,
                             moreLikeThis = similar
@@ -258,6 +270,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             isSwahiliNarrated = isSwahili,
                             initialPositionMs = resumePosition,
                             isFavorite = isFav,
+                            isWatchLater = isWatchLater,
                             downloadEntity = download,
                             castMembers = cast,
                             moreLikeThis = similar,
@@ -265,6 +278,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             selectedSeason = activeSeason,
                             episodes = seriesEpisodes,
                             currentSeasonEpisodes = currentSeasonEps,
+                            previousEpisode = prevEp,
                             nextEpisode = nextEp,
                             isNextEpisodePreloaded = nextEp?.id != null && EpisodePreloadManager.isEpisodePreloaded(nextEp.id)
                         )
@@ -306,6 +320,26 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 userDataRepo.toggleFavorite(dummyMovie)
             }
         }
+    }
+
+    fun toggleWatchLater() {
+        val current = _uiState.value
+        val id = current.movie?.id ?: current.episode?.id ?: return
+        val newWatchLater = !current.isWatchLater
+        _uiState.value = current.copy(isWatchLater = newWatchLater)
+        viewModelScope.launch(Dispatchers.IO) {
+            userDataRepo.toggleWatchLater(id)
+        }
+    }
+
+    fun playPreviousEpisode() {
+        val prev = _uiState.value.previousEpisode ?: return
+        loadMedia(prev.id, false)
+    }
+
+    fun playNextEpisode() {
+        val next = _uiState.value.nextEpisode ?: return
+        loadMedia(next.id, false)
     }
 
     fun startDownload(quality: String = "720p") {

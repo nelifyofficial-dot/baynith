@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.data.local.NeliPlayDatabase
 import com.example.data.local.entities.FavoriteEntity
@@ -109,6 +110,26 @@ class UserDataRepository(context: Context) {
         val KEY_ACKNOWLEDGED_UPDATE = stringPreferencesKey("acknowledged_update_version")
         val KEY_USER_COUNTRY = stringPreferencesKey("user_country_iso")
         val KEY_USER_LANGUAGE = stringPreferencesKey("user_preferred_language")
+        val KEY_WATCH_LATER_IDS = stringSetPreferencesKey("watch_later_ids")
+    }
+
+    val watchLaterIds: Flow<Set<String>> = appContext.dataStore.data.map { prefs ->
+        prefs[KEY_WATCH_LATER_IDS] ?: emptySet()
+    }
+
+    fun isWatchLater(id: String): Flow<Boolean> = appContext.dataStore.data.map { prefs ->
+        prefs[KEY_WATCH_LATER_IDS]?.contains(id) ?: false
+    }
+
+    suspend fun toggleWatchLater(id: String) {
+        appContext.dataStore.edit { prefs ->
+            val current = prefs[KEY_WATCH_LATER_IDS] ?: emptySet()
+            if (current.contains(id)) {
+                prefs[KEY_WATCH_LATER_IDS] = current - id
+            } else {
+                prefs[KEY_WATCH_LATER_IDS] = current + id
+            }
+        }
     }
 
     val userCountry: Flow<String> = appContext.dataStore.data.map { prefs ->

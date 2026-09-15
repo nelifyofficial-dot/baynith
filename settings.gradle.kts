@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "NeliPlay"
+rootProject.name = "Neliplay Swahili"
 
 include(":app")

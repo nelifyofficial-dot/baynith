@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">NeliPlay</string>
+    <string name="app_name">Neliplay Swahili</string>
     <!-- Google Cast Receiver Application ID.
          CC1AD845 is the default Google Cast Media Receiver.
          To use a custom receiver registered in Google Cast SDK Developer Console,

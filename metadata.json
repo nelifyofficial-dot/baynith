@@ -1,6 +1,6 @@
 {
-  "name": "NeliPlay",
-  "description": "Premium native movie streaming and downloading application with Live TV and offline playback.",
+  "name": "Neliplay Swahili",
+  "description": "Tazama filamu na tamthilia zilizotafsiriwa kwa Kiswahili na Ma-DJ mashuhuri (DJ Afro, DJ Murphy, DJ Black na wengineo) bure na kwa urahisi.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

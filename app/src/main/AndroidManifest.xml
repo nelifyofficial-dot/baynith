@@ -28,6 +28,11 @@
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="com.example.cast.NeliPlayCastOptionsProvider" />
 
+        <!-- Google AdMob Application ID -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-4408731854837351~4416275156" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

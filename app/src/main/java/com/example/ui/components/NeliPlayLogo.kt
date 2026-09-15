@@ -1,10 +1,13 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,39 +51,58 @@ fun NeliPlayLogo(
         Spacer(modifier = Modifier.width(10.dp))
 
         Column {
-            Text(
-                text = buildAnnotatedString {
-                    withStyle(
-                        style = SpanStyle(
-                            color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize = (size * 0.65).sp,
-                            letterSpacing = (-0.5).sp
-                        )
-                    ) {
-                        append("Neli")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = buildAnnotatedString {
+                        withStyle(
+                            style = SpanStyle(
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = (size * 0.65).sp,
+                                letterSpacing = (-0.5).sp
+                            )
+                        ) {
+                            append("Neli")
+                        }
+                        withStyle(
+                            style = SpanStyle(
+                                color = NeliOrangeAccent,
+                                fontWeight = FontWeight.Black,
+                                fontSize = (size * 0.65).sp,
+                                letterSpacing = (-0.5).sp
+                            )
+                        ) {
+                            append("play")
+                        }
                     }
-                    withStyle(
-                        style = SpanStyle(
-                            color = NeliOrangeAccent,
-                            fontWeight = FontWeight.Black,
-                            fontSize = (size * 0.65).sp,
-                            letterSpacing = (-0.5).sp
-                        )
-                    ) {
-                        append("play")
-                    }
+                )
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFFE50914))
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "SWAHILI",
+                        color = Color.White,
+                        fontSize = (size * 0.28).sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 0.5.sp
+                    )
                 }
-            )
+            }
 
             if (showSubtitle) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "MOVIES • SERIES • MORE",
-                    color = Color.White.copy(alpha = 0.65f),
+                    text = "FILAMU ZA KISWAHILI • MA-DJ",
+                    color = Color.White.copy(alpha = 0.75f),
                     fontSize = 9.sp,
                     fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.5.sp
+                    letterSpacing = 1.2.sp
                 )
             }
         }

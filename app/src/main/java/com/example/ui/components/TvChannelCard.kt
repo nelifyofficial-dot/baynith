@@ -159,3 +159,116 @@ fun TvChannelCard(
         }
     }
 }
+
+@Composable
+fun TvGridChannelCard(
+    channel: TvChannel,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "grid_pulse")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "grid_live_pulse"
+    )
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = NeliSurface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .testTag("tv_grid_channel_${channel.id}")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            // Channel Logo Area with Live Badge in top-right
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(105.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(NeliSurfaceElevated),
+                contentAlignment = Alignment.Center
+            ) {
+                if (channel.logoUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = channel.logoUrl,
+                        contentDescription = channel.name,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(12.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.LiveTv,
+                        contentDescription = "Live TV",
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+
+                if (channel.isLive) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(NeliLiveRed.copy(alpha = 0.25f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .alpha(alpha)
+                                .clip(CircleShape)
+                                .background(NeliLiveRed)
+                        )
+                        Text(
+                            text = "LIVE",
+                            color = NeliLiveRed,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Channel Name
+            Text(
+                text = channel.name,
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Category / Country
+            val subtitle = listOfNotNull(channel.category, channel.country).joinToString(" • ")
+            Text(
+                text = subtitle.ifEmpty { "Streaming 24/7" },
+                color = NeliTextSecondary,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}

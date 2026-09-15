@@ -214,7 +214,9 @@ fun AccountScreen(
                 NotLoggedInSection(
                     country = country,
                     isGoogleSigningIn = uiState.isGoogleSigningIn,
+                    isGuestSigningIn = uiState.isGuestSigningIn,
                     onGoogleSignIn = { viewModel.signInWithGoogle(context) },
+                    onQuickSignIn = { viewModel.signInAsGuest() },
                     onContinueWithoutAccount = onNavigateToHome,
                     onSelectCountry = { showCountryPickerDialog = true },
                     onNavigateToSettings = onNavigateToSettings
@@ -388,7 +390,9 @@ fun AccountScreen(
 private fun NotLoggedInSection(
     country: Country,
     isGoogleSigningIn: Boolean,
+    isGuestSigningIn: Boolean,
     onGoogleSignIn: () -> Unit,
+    onQuickSignIn: () -> Unit,
     onContinueWithoutAccount: () -> Unit,
     onSelectCountry: () -> Unit,
     onNavigateToSettings: () -> Unit
@@ -430,7 +434,7 @@ private fun NotLoggedInSection(
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "NeliPlay",
+                        contentDescription = "NeliPlay Swahili",
                         tint = NeliCyanAccent,
                         modifier = Modifier.size(36.dp)
                     )
@@ -438,30 +442,48 @@ private fun NotLoggedInSection(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Text(
-                    text = "NeliPlay",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Neliplay",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(NeliCyanAccent)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "SWAHILI",
+                            color = Color.Black,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Sign in to sync your watchlist, history and preferences.",
-                    fontSize = 14.sp,
+                    text = "Tazama filamu na tamthilia zilizotafsiriwa kwa Kiswahili. Ingia ili kuhifadhi filamu zako uzipendazo.",
+                    fontSize = 13.sp,
                     color = NeliTextSecondary,
                     textAlign = TextAlign.Center,
-                    lineHeight = 20.sp,
+                    lineHeight = 18.sp,
                     modifier = Modifier.padding(horizontal = 12.dp)
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
                 // BUTTON: Continue with Google
                 Button(
                     onClick = onGoogleSignIn,
-                    enabled = !isGoogleSigningIn,
+                    enabled = !isGoogleSigningIn && !isGuestSigningIn,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.White,
                         contentColor = Color(0xFF1F1F1F),
@@ -510,7 +532,54 @@ private fun NotLoggedInSection(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // BUTTON: Instant Quick Sign-In (Ingia Mara Moja)
+                Button(
+                    onClick = onQuickSignIn,
+                    enabled = !isGoogleSigningIn && !isGuestSigningIn,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = NeliBluePrimary,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("quick_signin_button")
+                ) {
+                    if (isGuestSigningIn) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Inaingia...",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = NeliCyanAccent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Ingia Mara Moja (Instant 1-Click)",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // BUTTON: Continue without account
                 OutlinedButton(
@@ -526,7 +595,7 @@ private fun NotLoggedInSection(
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(46.dp)
                         .testTag("continue_without_account_button")
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -538,8 +607,8 @@ private fun NotLoggedInSection(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Continue without account",
-                            fontSize = 14.sp,
+                            text = "Endelea bila akaunti (Free Browse)",
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             color = NeliTextPrimary
                         )
@@ -549,7 +618,7 @@ private fun NotLoggedInSection(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = "Login is optional. You can browse, search, and watch movies freely without an account.",
+                    text = "Unaweza kutazama filamu zote za Kiswahili bila kizuizi chochote.",
                     fontSize = 11.sp,
                     color = NeliTextSecondary.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center

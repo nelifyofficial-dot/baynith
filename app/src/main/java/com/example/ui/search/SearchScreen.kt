@@ -1,6 +1,10 @@
 package com.example.ui.search
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,9 +22,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,8 +31,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,20 +56,29 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.example.data.model.Movie
 import com.example.ui.components.EmptyStateView
-import com.example.ui.components.MovieCard
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.TvChannelCard
+import com.example.ui.components.resolveImageUrl
 import com.example.ui.series.SeriesCard
 import com.example.ui.theme.NeliBluePrimary
 import com.example.ui.theme.NeliBorder
 import com.example.ui.theme.NeliCyanAccent
+import com.example.ui.theme.NeliLiveRed
+import com.example.ui.theme.NeliRatingGold
 import com.example.ui.theme.NeliSurface
 import com.example.ui.theme.NeliSurfaceElevated
 import com.example.ui.theme.NeliTextSecondary
@@ -74,9 +94,10 @@ fun SearchScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
-    val filters = listOf("All", "Movies", "Series", "Live TV")
-    val trendingTags = listOf("Action", "African Movies", "Animation", "Comedy", "Drama", "Gospel", "Horror")
+    val typeFilters = listOf("All", "Movies", "Live Streams", "Series")
 
     Scaffold(
         topBar = {
@@ -85,15 +106,20 @@ fun SearchScreen(
                     .fillMaxWidth()
                     .background(NeliVoid)
                     .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(top = 8.dp, bottom = 10.dp)
             ) {
+                // 1. Query Bar & Navigation Back Button
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
                         onClick = onBack,
-                        modifier = Modifier.testTag("search_back_button")
+                        modifier = Modifier
+                            .size(44.dp)
+                            .testTag("search_back_button")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -102,30 +128,41 @@ fun SearchScreen(
                         )
                     }
 
+                    Spacer(modifier = Modifier.width(6.dp))
+
                     OutlinedTextField(
                         value = uiState.query,
                         onValueChange = { viewModel.onQueryChange(it) },
                         placeholder = {
                             Text(
-                                text = "Search movies, series, channels...",
+                                text = "Search by title or genre...",
                                 color = NeliTextSecondary,
-                                fontSize = 14.sp
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                tint = NeliCyanAccent
+                                contentDescription = "Search Icon",
+                                tint = NeliCyanAccent,
+                                modifier = Modifier.size(20.dp)
                             )
                         },
                         trailingIcon = {
                             if (uiState.query.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.clearQuery() }) {
+                                IconButton(
+                                    onClick = {
+                                        viewModel.clearQuery()
+                                    },
+                                    modifier = Modifier.testTag("search_clear_button")
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.Clear,
-                                        contentDescription = "Clear",
-                                        tint = Color.White
+                                        contentDescription = "Clear query",
+                                        tint = Color.White.copy(alpha = 0.8f),
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
@@ -134,6 +171,8 @@ fun SearchScreen(
                         keyboardActions = KeyboardActions(
                             onSearch = {
                                 viewModel.commitSearch(uiState.query)
+                                focusManager.clearFocus()
+                                keyboardController?.hide()
                             }
                         ),
                         singleLine = true,
@@ -143,9 +182,10 @@ fun SearchScreen(
                             focusedBorderColor = NeliCyanAccent,
                             unfocusedBorderColor = NeliBorder,
                             focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            unfocusedTextColor = Color.White,
+                            cursorColor = NeliCyanAccent
                         ),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier
                             .weight(1f)
                             .testTag("search_input_field")
@@ -154,25 +194,91 @@ fun SearchScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Filter chips: All, Movies, Series, Live TV
+                // 2. Type Filter Pills (All, Movies, Live Streams, Series)
                 LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(horizontal = 4.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp)
                 ) {
-                    items(filters) { filter ->
-                        val isSelected = uiState.selectedFilter == filter
+                    items(typeFilters) { filter ->
+                        val isSelected = uiState.selectedFilter == filter ||
+                                (filter == "Live Streams" && uiState.selectedFilter == "Live TV")
+                        val filterTag = "search_filter_${filter.replace(" ", "_")}"
+
+                        val icon = when (filter) {
+                            "Movies" -> Icons.Default.Movie
+                            "Live Streams" -> Icons.Default.LiveTv
+                            "Series" -> Icons.Default.Tv
+                            else -> Icons.Default.FilterList
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (isSelected) NeliBluePrimary else NeliSurfaceElevated)
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isSelected) NeliCyanAccent else Color.Transparent,
+                                    shape = RoundedCornerShape(20.dp)
+                                )
+                                .clickable {
+                                    viewModel.onFilterSelect(filter)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                                .testTag(filterTag),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = if (isSelected) Color.White else NeliTextSecondary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = filter,
+                                color = if (isSelected) Color.White else NeliTextSecondary,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 3. Genre Filter Chips Row (All Genres, Action, Comedy, News, Sports, etc.)
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                ) {
+                    items(uiState.availableGenres) { genre ->
+                        val isSelected = uiState.selectedGenre.equals(genre, ignoreCase = true)
+                        val genreLabel = if (genre.equals("All", ignoreCase = true)) "All Genres" else genre
+
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) NeliBluePrimary else NeliSurfaceElevated)
-                                .clickable { viewModel.onFilterSelect(filter) }
-                                .padding(horizontal = 14.dp, vertical = 6.dp)
-                                .testTag("search_filter_$filter")
+                                .background(
+                                    if (isSelected) NeliCyanAccent.copy(alpha = 0.22f)
+                                    else NeliSurface
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isSelected) NeliCyanAccent else NeliBorder,
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .clickable {
+                                    viewModel.onGenreSelect(genre)
+                                }
+                                .padding(horizontal = 11.dp, vertical = 5.dp)
+                                .testTag("search_genre_$genre")
                         ) {
                             Text(
-                                text = filter,
-                                color = Color.White,
-                                fontSize = 12.sp,
+                                text = genreLabel,
+                                color = if (isSelected) NeliCyanAccent else Color.White.copy(alpha = 0.85f),
+                                fontSize = 11.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
                         }
@@ -188,150 +294,59 @@ fun SearchScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (uiState.query.isBlank()) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 60.dp)
-                ) {
-                    // Recent Searches
-                    if (uiState.recentSearches.isNotEmpty()) {
-                        item {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.History,
-                                        contentDescription = null,
-                                        tint = NeliCyanAccent,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Recent Searches",
-                                        color = Color.White,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                TextButton(onClick = { viewModel.clearRecentSearches() }) {
-                                    Text(
-                                        text = "Clear all",
-                                        color = NeliTextSecondary,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            }
-
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(uiState.recentSearches) { term ->
-                                    Row(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(NeliSurface)
-                                            .clickable {
-                                                viewModel.onQueryChange(term)
-                                                viewModel.commitSearch(term)
-                                            }
-                                            .padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = term,
-                                            color = Color.White,
-                                            fontSize = 12.sp
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        IconButton(
-                                            onClick = { viewModel.removeRecentSearch(term) },
-                                            modifier = Modifier.size(18.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Remove",
-                                                tint = NeliTextSecondary,
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    }
-
-                    // Trending Searches chips
-                    item {
-                        Text(
-                            text = "Trending Tags",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
-                        )
-
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(trendingTags) { tag ->
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(20.dp))
-                                        .background(NeliSurface)
-                                        .clickable {
-                                            viewModel.onQueryChange(tag)
-                                            viewModel.commitSearch(tag)
-                                        }
-                                        .padding(horizontal = 14.dp, vertical = 8.dp)
-                                ) {
-                                    Text(
-                                        text = tag,
-                                        color = NeliCyanAccent,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(20.dp))
-                    }
-
-                    // Popular on NeliPlay
-                    if (uiState.popularMovies.isNotEmpty()) {
-                        item {
-                            SectionHeader(title = "Popular on NeliPlay")
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(uiState.popularMovies, key = { it.id }) { movie ->
-                                    MovieCard(
-                                        movie = movie,
-                                        cardWidth = 110,
-                                        cardHeight = 165,
-                                        onClick = {
-                                            viewModel.commitSearch(movie.title)
-                                            onMovieClick(movie.id)
-                                        }
-                                    )
-                                }
-                            }
-                        }
+            // Results Summary & Active Filters Strip
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val summaryText = buildString {
+                    if (uiState.query.isNotBlank()) {
+                        append("Results for \"${uiState.query}\" (${uiState.totalResults})")
+                    } else if (uiState.selectedGenre != "All") {
+                        append("Genre: ${uiState.selectedGenre} (${uiState.totalResults})")
+                    } else {
+                        append("Library (${uiState.totalResults} titles)")
                     }
                 }
-            } else if (uiState.isSearching) {
+
+                Text(
+                    text = summaryText,
+                    color = NeliTextSecondary,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+
+                if (uiState.isFilterActive) {
+                    TextButton(
+                        onClick = {
+                            viewModel.resetFilters()
+                        },
+                        modifier = Modifier.testTag("search_reset_filters_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.RestartAlt,
+                            contentDescription = null,
+                            tint = NeliCyanAccent,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Reset",
+                            color = NeliCyanAccent,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            // Body content
+            if (uiState.isSearching) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -340,92 +355,362 @@ fun SearchScreen(
                 }
             } else if (uiState.isEmpty) {
                 EmptyStateView(
-                    title = "No Results Found",
-                    message = "We couldn't find anything matching \"${uiState.query}\". Try checking the spelling or searching for another title."
+                    title = "No Matches Found",
+                    message = if (uiState.query.isNotBlank()) {
+                        "No titles found matching \"${uiState.query}\" in genre \"${uiState.selectedGenre}\". Try checking the spelling or searching another title."
+                    } else {
+                        "No titles available in genre \"${uiState.selectedGenre}\" for the selected filter."
+                    },
+                    icon = Icons.Outlined.Search,
+                    actionButtonText = "Reset Filters",
+                    onActionClick = { viewModel.resetFilters() },
+                    modifier = Modifier.padding(top = 40.dp)
                 )
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
-                    item {
-                        Text(
-                            text = "Results for \"${uiState.query}\" (${uiState.totalResults})",
-                            color = NeliTextSecondary,
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-                        )
-                    }
-
-                    // Movies Results
-                    if (uiState.movies.isNotEmpty()) {
+                    // Recent searches strip (only when query is blank & recent searches exist)
+                    if (uiState.query.isBlank() && uiState.recentSearches.isNotEmpty() && uiState.selectedGenre == "All") {
                         item {
-                            SectionHeader(title = "Movies (${uiState.movies.size})")
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp)
                             ) {
-                                items(uiState.movies, key = { it.id }) { movie ->
-                                    MovieCard(
-                                        movie = movie,
-                                        cardWidth = 110,
-                                        cardHeight = 165,
-                                        onClick = {
-                                            viewModel.commitSearch(uiState.query)
-                                            onMovieClick(movie.id)
-                                        }
-                                    )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.History,
+                                            contentDescription = null,
+                                            tint = NeliCyanAccent,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Recent Searches",
+                                            color = Color.White,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    TextButton(onClick = { viewModel.clearRecentSearches() }) {
+                                        Text(
+                                            text = "Clear all",
+                                            color = NeliTextSecondary,
+                                            fontSize = 11.sp
+                                        )
+                                    }
                                 }
+
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    items(uiState.recentSearches) { term ->
+                                        Row(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .background(NeliSurface)
+                                                .border(1.dp, NeliBorder, RoundedCornerShape(16.dp))
+                                                .clickable {
+                                                    viewModel.onQueryChange(term)
+                                                    viewModel.commitSearch(term)
+                                                }
+                                                .padding(start = 12.dp, top = 5.dp, bottom = 5.dp, end = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = term,
+                                                color = Color.White,
+                                                fontSize = 12.sp
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            IconButton(
+                                                onClick = { viewModel.removeRecentSearch(term) },
+                                                modifier = Modifier.size(18.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = "Remove",
+                                                    tint = NeliTextSecondary,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
                             }
-                            Spacer(modifier = Modifier.height(16.dp))
                         }
                     }
 
-                    // TV Series Results
-                    if (uiState.series.isNotEmpty()) {
-                        item {
-                            SectionHeader(title = "TV Series (${uiState.series.size})")
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(uiState.series, key = { it.id }) { series ->
-                                    SeriesCard(
-                                        series = series,
-                                        onClick = {
-                                            viewModel.commitSearch(uiState.query)
-                                            onSeriesClick(series.id)
-                                        }
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    }
-
-                    // Live TV Channel Results
+                    // 1. LIVE STREAMS SECTION
                     if (uiState.channels.isNotEmpty()) {
                         item {
-                            SectionHeader(title = "Live TV Channels (${uiState.channels.size})")
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
+                            SectionHeader(
+                                title = "🔴 Live Streams (${uiState.channels.size})"
+                            )
+                        }
+
+                        // Display TV Channels
+                        items(uiState.channels, key = { "tv_${it.id}" }) { channel ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 5.dp)
+                            ) {
+                                TvChannelCard(
+                                    channel = channel,
+                                    onClick = {
+                                        if (uiState.query.isNotBlank()) {
+                                            viewModel.commitSearch(uiState.query)
+                                        }
+                                        onChannelClick(channel.id)
+                                    }
+                                )
+                            }
+                        }
+
+                        item {
+                            Spacer(modifier = Modifier.height(14.dp))
+                        }
+                    }
+
+                    // 2. MOVIES SECTION
+                    if (uiState.movies.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "🎬 Movies (${uiState.movies.size})"
+                            )
+                        }
+
+                        // Display movies in pairs (2-column responsive layout)
+                        items(uiState.movies.chunked(2), key = { chunk -> chunk.joinToString("-") { it.id } }) { rowMovies ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                items(uiState.channels, key = { it.id }) { channel ->
-                                    TvChannelCard(
-                                        channel = channel,
+                                for (movie in rowMovies) {
+                                    SearchMovieGridCard(
+                                        movie = movie,
                                         onClick = {
-                                            viewModel.commitSearch(uiState.query)
-                                            onChannelClick(channel.id)
-                                        }
+                                            if (uiState.query.isNotBlank()) {
+                                                viewModel.commitSearch(uiState.query)
+                                            }
+                                            onMovieClick(movie.id)
+                                        },
+                                        onGenreClick = { genre ->
+                                            viewModel.onGenreSelect(genre)
+                                        },
+                                        modifier = Modifier.weight(1f)
                                     )
                                 }
+                                if (rowMovies.size == 1) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
                             }
-                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+
+                        item {
+                            Spacer(modifier = Modifier.height(14.dp))
+                        }
+                    }
+
+                    // 3. TV SERIES SECTION
+                    if (uiState.series.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "📺 TV Series (${uiState.series.size})"
+                            )
+                        }
+
+                        items(uiState.series.chunked(2), key = { chunk -> "ser_" + chunk.joinToString("-") { it.id } }) { rowSeries ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                for (series in rowSeries) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        SeriesCard(
+                                            series = series,
+                                            onClick = {
+                                                if (uiState.query.isNotBlank()) {
+                                                    viewModel.commitSearch(uiState.query)
+                                                }
+                                                onSeriesClick(series.id)
+                                            }
+                                        )
+                                    }
+                                }
+                                if (rowSeries.size == 1) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * High-craft Movie card optimized for grid displays in the Search screen.
+ * Displays poster art, HD badge, star rating, title, year, and primary genre.
+ */
+@Composable
+fun SearchMovieGridCard(
+    movie: Movie,
+    onClick: () -> Unit,
+    onGenreClick: (String) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .testTag("search_movie_card_${movie.id}")
+    ) {
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = NeliSurface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.68f)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                val imageUrl = resolveImageUrl(movie.posterPath.ifEmpty { movie.backdropPath })
+
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = movie.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+
+                // Gradient scrim at bottom for text legibility
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f)),
+                                startY = 200f
+                            )
+                        )
+                )
+
+                // Rating badge top-left
+                if (movie.rating > 0.0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(6.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color.Black.copy(alpha = 0.75f))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                tint = NeliRatingGold,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = String.format("%.1f", movie.rating),
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // HD badge top-right
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(NeliBluePrimary.copy(alpha = 0.85f))
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "HD",
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Primary genre tag pill at bottom-left inside image
+                val primaryGenre = movie.genres.firstOrNull()
+                if (!primaryGenre.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(6.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(NeliCyanAccent.copy(alpha = 0.85f))
+                            .clickable { onGenreClick(primaryGenre) }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = primaryGenre,
+                            color = Color.Black,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Title
+        Text(
+            text = movie.title,
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        // Year & runtime info
+        val subtitle = buildString {
+            movie.year?.let { append(it) }
+            if (movie.runtime != null && movie.runtime > 0) {
+                if (isNotEmpty()) append(" • ")
+                append("${movie.runtime}m")
+            }
+        }
+        if (subtitle.isNotEmpty()) {
+            Text(
+                text = subtitle,
+                color = NeliTextSecondary,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
