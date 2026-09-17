@@ -4,23 +4,11 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.util.Log
-import androidx.credentials.ClearCredentialStateRequest
-import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.exceptions.GetCredentialCancellationException
-import androidx.credentials.exceptions.GetCredentialCustomException
-import androidx.credentials.exceptions.GetCredentialException
-import androidx.credentials.exceptions.NoCredentialException
 import com.example.data.firebase.FirebaseManager
 import com.example.data.model.UserProfile
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.google.firebase.auth.FirebaseUser
-import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
@@ -97,89 +85,102 @@ class AuthRepository {
         }
     }
 
-    private fun getActivity(context: Context): Activity? {
-        var ctx = context
-        while (ctx is ContextWrapper) {
-            if (ctx is Activity) return ctx
-            ctx = ctx.baseContext
+    /**
+     * Signs up a new user with email, password, and username.
+     */
+    suspend fun signUpWithEmail(email: String, password: String, username: String): Result<FirebaseUser> {
+        return try {
+            val trimmedEmail = email.trim()
+            val trimmedUsername = username.trim()
+            val authResult = auth.createUserWithEmailAndPassword(trimmedEmail, password).await()
+            val user = authResult.user ?: throw Exception("Failed to create account.")
+
+            // Update Firebase User display name
+            try {
+                val profileChange = com.google.firebase.auth.userProfileChangeRequest {
+                    displayName = trimmedUsername
+                }
+                user.updateProfile(profileChange).await()
+            } catch (e: Exception) {
+                Log.w(TAG, "Profile update warning: ${e.message}")
+            }
+
+            // Sync User Profile to Firestore
+            val now = System.currentTimeMillis()
+            val data = mapOf(
+                "uid" to user.uid,
+                "displayName" to trimmedUsername,
+                "username" to trimmedUsername,
+                "email" to trimmedEmail,
+                "photoUrl" to "",
+                "role" to "user",
+                "isPremium" to false,
+                "createdAt" to now,
+                "updatedAt" to now,
+                "lastActiveAt" to now,
+                "country" to "TZ",
+                "language" to "sw"
+            )
+            FirebaseManager.usersCollection.document(user.uid).set(data, SetOptions.merge()).await()
+
+            Result.success(user)
+        } catch (e: Exception) {
+            Log.e(TAG, "Sign up error: ${e.message}", e)
+            val userMsg = when {
+                e.message?.contains("email address is already in use", ignoreCase = true) == true ->
+                    "Barua pepe hii tayari inatumika. Tafadhali ingia."
+                e.message?.contains("weak password", ignoreCase = true) == true ->
+                    "Nenosiri ni dhaifu. Tafadhali weka angalau herufi 6."
+                e.message?.contains("badly formatted", ignoreCase = true) == true ->
+                    "Tafadhali weka barua pepe sahihi."
+                else -> e.message ?: "Usajili haukufanikiwa."
+            }
+            Result.failure(Exception(userMsg))
         }
-        return null
     }
 
     /**
-     * Authenticates with Google using modern Android Credential Manager.
+     * Signs in an existing user with email (or username) and password.
      */
-    suspend fun signInWithGoogle(context: Context): Result<FirebaseUser> {
+    suspend fun signInWithEmail(emailOrUsername: String, password: String): Result<FirebaseUser> {
         return try {
-            val activity = getActivity(context)
-            val launchContext = activity ?: context
-            val credentialManager = CredentialManager.create(launchContext)
-
-            val googleIdOption = GetGoogleIdOption.Builder()
-                .setFilterByAuthorizedAccounts(false)
-                .setServerClientId(GOOGLE_WEB_CLIENT_ID)
-                .setAutoSelectEnabled(false)
-                .build()
-
-            val request = GetCredentialRequest.Builder()
-                .addCredentialOption(googleIdOption)
-                .build()
-
-            val response = credentialManager.getCredential(context = launchContext, request = request)
-            val credential = response.credential
-
-            when {
-                credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL -> {
-                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                    val idToken = googleIdTokenCredential.idToken
-
-                    val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
-                    val authResult = auth.signInWithCredential(firebaseCredential).await()
-                    val user = authResult.user ?: throw Exception("Firebase user is null after sign in.")
-
-                    // Sync/Create user profile in Firestore
-                    syncUserProfile(user)
-
-                    Result.success(user)
-                }
-                credential is CustomCredential -> {
-                    val idToken = credential.data.getString("androidx.credentials.BUNDLE_KEY_ID_TOKEN")
-                        ?: credential.data.getString("id_token")
-                    if (!idToken.isNullOrBlank()) {
-                        val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
-                        val authResult = auth.signInWithCredential(firebaseCredential).await()
-                        val user = authResult.user ?: throw Exception("Firebase user is null after sign in.")
-                        syncUserProfile(user)
-                        Result.success(user)
+            var targetEmail = emailOrUsername.trim()
+            if (!targetEmail.contains("@")) {
+                // Look up by username in Firestore
+                try {
+                    val query = FirebaseManager.usersCollection
+                        .whereEqualTo("username", targetEmail)
+                        .limit(1)
+                        .get()
+                        .await()
+                    val foundDoc = query.documents.firstOrNull()
+                    val foundEmail = foundDoc?.getString("email")
+                    if (!foundEmail.isNullOrBlank()) {
+                        targetEmail = foundEmail
                     } else {
-                        Result.failure(Exception("Could not extract Google ID Token."))
+                        targetEmail = "$targetEmail@neliplay.app"
                     }
-                }
-                else -> {
-                    Result.failure(Exception("Unrecognized credential type: ${credential.type}"))
+                } catch (e: Exception) {
+                    targetEmail = "$targetEmail@neliplay.app"
                 }
             }
-        } catch (e: GetCredentialCancellationException) {
-            Log.i(TAG, "User canceled Google sign-in.")
-            Result.failure(Exception("Sign-in canceled"))
-        } catch (e: NoCredentialException) {
-            Log.w(TAG, "No Google accounts found: ${e.message}")
-            Result.failure(Exception("No Google accounts found on device. Tap Instant Quick Sign-In below."))
-        } catch (e: GetCredentialException) {
-            Log.e(TAG, "Credential Manager error: ${e.message}", e)
-            val errText = e.message ?: ""
-            val userFriendlyMessage = when {
-                errText.contains("16") || errText.contains("Developer error", ignoreCase = true) || errText.contains("SHA", ignoreCase = true) ->
-                    "Google Play Services: App SHA-1 (B9:46:68:CC:91:60:8F:DC:0E:0F:6A:EB:09:1C:A6:1B:64:7E:C8:92) needs to be registered in Firebase Console. You can use Instant Quick Sign-In below!"
-                errText.contains("cancel", ignoreCase = true) ->
-                    "Sign-in canceled"
-                else ->
-                    "Google Sign-In failed (${e.message}). You can use Instant Quick Sign-In."
-            }
-            Result.failure(Exception(userFriendlyMessage))
+
+            val authResult = auth.signInWithEmailAndPassword(targetEmail, password).await()
+            val user = authResult.user ?: throw Exception("Sign-in failed.")
+            syncUserProfile(user)
+            Result.success(user)
         } catch (e: Exception) {
-            Log.e(TAG, "Google sign-in error: ${e.message}", e)
-            Result.failure(e)
+            Log.e(TAG, "Sign in error: ${e.message}", e)
+            val userMsg = when {
+                e.message?.contains("no user record", ignoreCase = true) == true ||
+                e.message?.contains("user-not-found", ignoreCase = true) == true ->
+                    "Akaunti haijapatikana. Tafadhali jisajili kwanza."
+                e.message?.contains("invalid-credential", ignoreCase = true) == true ||
+                e.message?.contains("wrong-password", ignoreCase = true) == true ->
+                    "Nenosiri au barua pepe si sahihi."
+                else -> e.message ?: "Kuingia kumeshindwa."
+            }
+            Result.failure(Exception(userMsg))
         }
     }
 
@@ -276,13 +277,11 @@ class AuthRepository {
     }
 
     /**
-     * Signs out user and clears credential state.
+     * Signs out user.
      */
-    suspend fun signOut(context: Context) {
+    suspend fun signOut(context: Context? = null) {
         try {
             auth.signOut()
-            val credentialManager = CredentialManager.create(context)
-            credentialManager.clearCredentialState(ClearCredentialStateRequest())
         } catch (e: Exception) {
             Log.w(TAG, "Error during signOut: ${e.message}")
         }
@@ -294,7 +293,6 @@ class AuthRepository {
      * - users/{uid}/watchHistory
      * - users/{uid}
      * Then deletes the Firebase Authentication account.
-     * If recent authentication is required, attempts Google re-authentication.
      */
     suspend fun deleteAccount(context: Context? = null): Result<Unit> {
         val user = auth.currentUser ?: return Result.failure(Exception("No user currently logged in."))
@@ -334,24 +332,10 @@ class AuthRepository {
             try {
                 user.delete().await()
             } catch (e: FirebaseAuthRecentLoginRequiredException) {
-                if (context != null) {
-                    Log.i(TAG, "Re-authenticating user before account deletion...")
-                    val reauthResult = signInWithGoogle(context)
-                    if (reauthResult.isSuccess) {
-                        auth.currentUser?.delete()?.await()
-                    } else {
-                        throw Exception("Re-authentication required. Please sign in with Google again to confirm account deletion.")
-                    }
-                } else {
-                    throw Exception("Security policy requires recent authentication. Please sign in again and retry.")
-                }
+                throw Exception("Tafadhali ingia tena upya kisha ufute akaunti kwa ajili ya usalama.")
             }
 
-            if (context != null) {
-                signOut(context)
-            } else {
-                auth.signOut()
-            }
+            auth.signOut()
 
             Log.i(TAG, "User account successfully deleted for uid: $uid")
             Result.success(Unit)

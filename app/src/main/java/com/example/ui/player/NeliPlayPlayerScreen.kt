@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
@@ -96,16 +97,19 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
+import com.example.MainActivity
 import com.example.data.local.entities.DownloadState
-import com.example.data.model.CastMember
-import com.example.ui.components.NeliPlayAdMobBanner
+import com.example.ui.player.embed.NeliPlayEmbeddedPlayer
 import com.example.ui.details.formatRuntime
 import com.example.ui.theme.NeliBluePrimary
 import com.example.ui.theme.NeliCyanAccent
 import com.example.ui.theme.NeliGreenSuccess
+import com.example.data.model.CastMember
 import com.example.ui.theme.NeliSurfaceElevated
 import com.example.ui.theme.NeliTextSecondary
 import com.example.ui.theme.NeliVoid
@@ -221,11 +225,37 @@ private fun NeliPlayExoPlayerContent(
         }
     }
 
-    // Media3 ExoPlayer instance
+    // Media3 ExoPlayer instance with hardware/software decoder fallback
     val exoPlayer = remember {
+        val codecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+            val defaultDecoders = MediaCodecSelector.DEFAULT.getDecoderInfos(
+                mimeType,
+                requiresSecureDecoder,
+                requiresTunnelingDecoder
+            )
+            val isEmu = com.example.ui.player.embed.NeliPlayEmbedUtils.isEmulator()
+            if (isEmu) {
+                // In emulator environments, demote goldfish/ranchu virtual hardware codecs that fail
+                // system resource queries (error 6) and prioritize stable software decoders (c2.android / OMX.google)
+                defaultDecoders.sortedWith(
+                    compareByDescending<MediaCodecInfo> {
+                        !it.name.contains("goldfish", ignoreCase = true) && !it.name.contains("ranchu", ignoreCase = true)
+                    }.thenByDescending {
+                        it.softwareOnly || it.name.startsWith("c2.android.") || it.name.startsWith("OMX.google.")
+                    }
+                )
+            } else {
+                // On real hardware devices, keep default hardware decoder order but demote broken virtual decoders
+                defaultDecoders.sortedByDescending {
+                    !it.name.contains("goldfish", ignoreCase = true) && !it.name.contains("ranchu", ignoreCase = true)
+                }
+            }
+        }
+
         val renderersFactory = DefaultRenderersFactory(context)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
             .setEnableDecoderFallback(true)
+            .setMediaCodecSelector(codecSelector)
 
         val loadControl = EpisodePreloadManager.buildAggressiveLoadControl()
         val httpSourceFactory = EpisodePreloadManager.createHttpDataSourceFactory()
@@ -242,7 +272,7 @@ private fun NeliPlayExoPlayerContent(
             }
     }
 
-    // TextureView PlayerView
+    // SurfaceView PlayerView (Hardware Composited)
     val playerView = remember(exoPlayer) {
         val view = android.view.LayoutInflater.from(context)
             .inflate(com.example.R.layout.neliplay_player_view, null) as PlayerView
@@ -252,14 +282,31 @@ private fun NeliPlayExoPlayerContent(
         }
     }
 
-    // Lifecycle Observer
+    // Sync active player status with MainActivity for PiP and auto-pause
+    DisposableEffect(Unit) {
+        MainActivity.isPlayerActive = true
+        onDispose {
+            MainActivity.isPlayerActive = false
+            MainActivity.isPlayerPlaying = false
+        }
+    }
+    LaunchedEffect(isPlaying) {
+        MainActivity.isPlayerPlaying = isPlaying
+    }
+
+    // Lifecycle Observer: Auto-pause when leaving app unless entering Picture-in-Picture mode
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, exoPlayer) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             when (event) {
                 androidx.lifecycle.Lifecycle.Event.ON_PAUSE,
                 androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
-                    exoPlayer.pause()
+                    val inPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        activity?.isInPictureInPictureMode == true
+                    } else false
+                    if (!inPip) {
+                        exoPlayer.pause()
+                    }
                 }
                 else -> {}
             }
@@ -501,74 +548,87 @@ private fun NeliPlayExoPlayerContent(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // --- FIXED STICKY YOUTUBE PLAYER CONTAINER ---
-            // Starts and covers directly from the top! Back button and controls are hosted within the player overlay.
-            YouTubePlayerContainer(
-                streamUrl = uiState.mediaUrl,
-                posterUrl = displayPoster,
-                title = uiState.displayTitle,
-                isLive = isLive,
-                isPlaying = isPlaying,
-                isBuffering = isBuffering,
-                isMuted = isMuted,
-                playerError = playerError,
-                playbackPosition = playbackPosition,
-                playbackDuration = playbackDuration,
-                isFullscreen = isFullscreen,
-                exoPlayer = exoPlayer,
-                playerView = playerView,
-                isMovie = uiState.isMovie,
-                autoSkipIntro = uiState.autoSkipIntro,
-                showAutoSkippedNotice = showAutoSkippedNotice,
-                onDismissAutoSkipNotice = { showAutoSkippedNotice = false },
-                onToggleAutoSkipIntro = { viewModel.toggleAutoSkipIntro(!uiState.autoSkipIntro) },
-                onSkipIntro = {
-                    exoPlayer.seekTo(MOVIE_AUTOSKIP_OFFSET_MS)
-                    showAutoSkippedNotice = true
-                },
-                onBack = {
-                    if (isFullscreen) {
-                        toggleFullscreen()
-                    } else {
-                        onBack()
-                    }
-                },
-                onPlayPause = {
-                    if (isPlaying) exoPlayer.pause() else exoPlayer.play()
-                },
-                onSeek = { targetMs -> exoPlayer.seekTo(targetMs) },
-                onRewind10 = {
-                    val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
-                    exoPlayer.seekTo(newPos)
-                },
-                onForward10 = {
-                    val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(exoPlayer.duration)
-                    exoPlayer.seekTo(newPos)
-                },
-                onRetry = {
-                    playerError = null
-                    exoPlayer.prepare()
-                    exoPlayer.play()
-                },
-                onToggleMute = { toggleMute() },
-                onToggleFullscreen = { toggleFullscreen() },
-                onOpenSettings = { showSettingsDialog = true },
-                modifier = if (isFullscreen) {
-                    Modifier.fillMaxSize()
-                } else {
-                    Modifier
+            if (uiState.isEmbed || (uiState.mediaUrl.isBlank() && uiState.embedCode.isNotBlank())) {
+                NeliPlayEmbeddedPlayer(
+                    embedCode = uiState.embedCode,
+                    title = uiState.displayTitle,
+                    onBack = onBack,
+                    contentId = uiState.movie?.id ?: uiState.episode?.id ?: "",
+                    modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(16f / 9f)
-                }
-            )
+                )
+            } else {
+                // --- FIXED STICKY YOUTUBE PLAYER CONTAINER ---
+                // Starts and covers directly from the top! Back button and controls are hosted within the player overlay.
+                YouTubePlayerContainer(
+                    streamUrl = uiState.mediaUrl,
+                    posterUrl = displayPoster,
+                    title = uiState.displayTitle,
+                    isLive = isLive,
+                    isPlaying = isPlaying,
+                    isBuffering = isBuffering,
+                    isMuted = isMuted,
+                    playerError = playerError,
+                    playbackPosition = playbackPosition,
+                    playbackDuration = playbackDuration,
+                    isFullscreen = isFullscreen,
+                    exoPlayer = exoPlayer,
+                    playerView = playerView,
+                    isMovie = uiState.isMovie,
+                    autoSkipIntro = uiState.autoSkipIntro,
+                    showAutoSkippedNotice = showAutoSkippedNotice,
+                    onDismissAutoSkipNotice = { showAutoSkippedNotice = false },
+                    onToggleAutoSkipIntro = { viewModel.toggleAutoSkipIntro(!uiState.autoSkipIntro) },
+                    onSkipIntro = {
+                        exoPlayer.seekTo(MOVIE_AUTOSKIP_OFFSET_MS)
+                        showAutoSkippedNotice = true
+                    },
+                    onBack = {
+                        if (isFullscreen) {
+                            toggleFullscreen()
+                        } else {
+                            onBack()
+                        }
+                    },
+                    onPlayPause = {
+                        if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                    },
+                    onSeek = { targetMs -> exoPlayer.seekTo(targetMs) },
+                    onRewind10 = {
+                        val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
+                        exoPlayer.seekTo(newPos)
+                    },
+                    onForward10 = {
+                        val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(exoPlayer.duration)
+                        exoPlayer.seekTo(newPos)
+                    },
+                    onRetry = {
+                        playerError = null
+                        exoPlayer.prepare()
+                        exoPlayer.play()
+                    },
+                    onToggleMute = { toggleMute() },
+                    onToggleFullscreen = { toggleFullscreen() },
+                    onEnterPip = {
+                        activity?.let { act ->
+                            if (act is MainActivity) {
+                                act.enterPictureInPicture()
+                            }
+                        }
+                    },
+                    onOpenSettings = { showSettingsDialog = true },
+                    modifier = if (isFullscreen) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(16f / 9f)
+                    }
+                )
+            }
 
             if (!isFullscreen) {
-                // Google AdMob Banner Ad (down the player)
-                NeliPlayAdMobBanner(
-                    adUnitId = "ca-app-pub-4408731854837351/2204657741",
-                    modifier = Modifier.fillMaxWidth()
-                )
-
                 // --- 2. SCROLLABLE CONTENT (Passes DOWN underneath the sticky player) ---
                 LazyColumn(
                     modifier = Modifier
@@ -1165,9 +1225,10 @@ private fun NeliPlayExoPlayerContent(
         }
 
         // CAST PROFILE DIALOG (When user taps any cast member)
-        if (selectedCastForProfile != null) {
+        val activeCast = selectedCastForProfile
+        if (activeCast != null) {
             CastProfileDialog(
-                cast = selectedCastForProfile!!,
+                cast = activeCast,
                 onDismiss = { selectedCastForProfile = null }
             )
         }
@@ -1314,17 +1375,6 @@ private fun NeliPlayExoPlayerContent(
                                 )
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Google AdMob Ads Section in Settings
-                        Text("Google AdMob Ads", color = Color(0xFFFFA000), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Status: Active & Ready",
-                            color = NeliGreenSuccess,
-                            fontSize = 11.sp
-                        )
                     }
                 },
                 confirmButton = {

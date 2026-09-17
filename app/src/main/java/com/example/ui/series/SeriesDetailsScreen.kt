@@ -25,7 +25,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,7 +62,6 @@ import com.example.ui.theme.NeliSurfaceElevated
 import com.example.ui.theme.NeliTextPrimary
 import com.example.ui.theme.NeliTextSecondary
 import com.example.ui.theme.NeliVoid
-import com.example.util.NeliPlayShareUtils
 
 @Composable
 fun SeriesDetailsScreen(
@@ -150,7 +148,7 @@ fun SeriesDetailsScreen(
                                 .fillMaxWidth()
                                 .statusBarsPadding()
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.Start,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
@@ -163,20 +161,6 @@ fun SeriesDetailsScreen(
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "Back",
-                                    tint = Color.White
-                                )
-                            }
-
-                            IconButton(
-                                onClick = { NeliPlayShareUtils.shareSeries(context, series) },
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.5f))
-                                    .testTag("series_share_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Share,
-                                    contentDescription = "Share Series",
                                     tint = Color.White
                                 )
                             }

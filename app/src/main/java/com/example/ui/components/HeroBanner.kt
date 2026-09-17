@@ -188,6 +188,23 @@ private fun HeroBannerItem(
                 .padding(horizontal = 20.dp, vertical = 22.dp),
             verticalArrangement = Arrangement.Bottom
         ) {
+            // "NEW MOVIE" Badge
+            Box(
+                modifier = Modifier
+                    .padding(bottom = 8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(NeliCyanAccent)
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = "NEW MOVIE",
+                    color = Color.Black,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 10.sp,
+                    letterSpacing = 0.8.sp
+                )
+            }
+
             // Genre and Rating pill row
             Row(
                 verticalAlignment = Alignment.CenterVertically,

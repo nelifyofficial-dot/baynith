@@ -61,9 +61,9 @@ object EpisodePreloadManager {
      */
     fun createHttpDataSourceFactory(): DefaultHttpDataSource.Factory {
         return DefaultHttpDataSource.Factory()
-            .setUserAgent("NeliPlay/2.0 (Android; ExoPlayer-Aggressive-Preload)")
-            .setConnectTimeoutMs(8_000)
-            .setReadTimeoutMs(10_000)
+            .setUserAgent("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 Neliplay/2.0")
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(20_000)
             .setAllowCrossProtocolRedirects(true)
     }
 

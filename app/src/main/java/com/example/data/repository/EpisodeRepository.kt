@@ -102,41 +102,78 @@ class EpisodeRepository {
     /**
      * Observes episodes associated with a series (Item 27).
      * Filtered by seriesId or movieId and sorted by seasonNumber, episodeNumber.
-     * Uses .whereEqualTo("published", true) to satisfy Firestore public read security rules.
+     * Tries root episodes collection, and merges with series/{seriesId}/episodes subcollection.
      */
     fun getEpisodesForSeries(seriesId: String): Flow<List<Episode>> = callbackFlow {
         var listener: ListenerRegistration? = null
+        var subListener: ListenerRegistration? = null
+        val rootEpisodes = mutableListOf<Episode>()
+        val subEpisodes = mutableListOf<Episode>()
+
+        fun emitCombined() {
+            val combinedMap = LinkedHashMap<String, Episode>()
+            for (ep in rootEpisodes) {
+                combinedMap[ep.id] = ep
+            }
+            for (ep in subEpisodes) {
+                combinedMap[ep.id] = ep
+            }
+            val sortedList = combinedMap.values.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
+            trySend(sortedList)
+        }
+
         try {
             listener = FirebaseManager.episodesCollection
-                .whereEqualTo("published", true)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        Log.w(TAG, "Query episodes for series $seriesId note: ${error.message}")
-                        trySend(emptyList())
-                        return@addSnapshotListener
-                    }
-                    if (snapshot != null) {
-                        val episodes = snapshot.documents.mapNotNull { doc ->
+                        Log.w(TAG, "Query root episodes for series $seriesId note: ${error.message}")
+                    } else if (snapshot != null) {
+                        rootEpisodes.clear()
+                        for (doc in snapshot.documents) {
                             try {
                                 val ep = Episode.fromDocument(doc)
                                 val matches = ep.seriesId.equals(seriesId, ignoreCase = true) ||
                                               ep.movieId.equals(seriesId, ignoreCase = true)
-                                if (matches && ep.published) ep else null
+                                if (matches) {
+                                    rootEpisodes.add(ep)
+                                }
                             } catch (e: Exception) {
                                 Log.e(TAG, "Episode parse error: ${e.message}")
-                                null
                             }
-                        }.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
-                        trySend(episodes)
+                        }
+                        emitCombined()
                     }
                 }
         } catch (e: Exception) {
-            Log.e(TAG, "Exception querying episodes for series $seriesId: ${e.message}")
-            trySend(emptyList())
+            Log.e(TAG, "Exception querying root episodes: ${e.message}")
+        }
+
+        try {
+            subListener = FirebaseManager.seriesCollection.document(seriesId)
+                .collection("episodes")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.w(TAG, "Query subcollection episodes for series $seriesId note: ${error.message}")
+                    } else if (snapshot != null) {
+                        subEpisodes.clear()
+                        for (doc in snapshot.documents) {
+                            try {
+                                val ep = Episode.fromDocument(doc)
+                                subEpisodes.add(ep)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Subcollection episode parse error: ${e.message}")
+                            }
+                        }
+                        emitCombined()
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying subcollection episodes: ${e.message}")
         }
 
         awaitClose {
             listener?.remove()
+            subListener?.remove()
         }
     }
 

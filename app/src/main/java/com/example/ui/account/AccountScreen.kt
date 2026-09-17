@@ -23,16 +23,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
@@ -40,6 +43,8 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -49,12 +54,20 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -213,9 +226,11 @@ fun AccountScreen(
                 // STATE A — NOT LOGGED IN
                 NotLoggedInSection(
                     country = country,
-                    isGoogleSigningIn = uiState.isGoogleSigningIn,
+                    isSigningIn = uiState.isSigningIn,
+                    isSigningUp = uiState.isSigningUp,
                     isGuestSigningIn = uiState.isGuestSigningIn,
-                    onGoogleSignIn = { viewModel.signInWithGoogle(context) },
+                    onSignIn = { emailOrUser, pass -> viewModel.signIn(emailOrUser, pass) },
+                    onSignUp = { email, pass, username -> viewModel.signUp(email, pass, username) },
                     onQuickSignIn = { viewModel.signInAsGuest() },
                     onContinueWithoutAccount = onNavigateToHome,
                     onSelectCountry = { showCountryPickerDialog = true },
@@ -384,19 +399,28 @@ fun AccountScreen(
 
 /**
  * STATE A — NOT LOGGED IN
- * Clean cinematic card with NeliPlay branding, "Continue with Google", and "Continue without account".
+ * Authentication with Email, Password, and Username only (No Google).
  */
 @Composable
 private fun NotLoggedInSection(
     country: Country,
-    isGoogleSigningIn: Boolean,
+    isSigningIn: Boolean,
+    isSigningUp: Boolean,
     isGuestSigningIn: Boolean,
-    onGoogleSignIn: () -> Unit,
+    onSignIn: (emailOrUser: String, pass: String) -> Unit,
+    onSignUp: (email: String, pass: String, username: String) -> Unit,
     onQuickSignIn: () -> Unit,
     onContinueWithoutAccount: () -> Unit,
     onSelectCountry: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
+    var isSignUpTab by remember { mutableStateOf(false) }
+    var username by remember { mutableStateOf("") }
+    var emailOrUsername by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var isPasswordVisible by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -419,7 +443,7 @@ private fun NotLoggedInSection(
                 // NeliPlay Logo Branding
                 Box(
                     modifier = Modifier
-                        .size(68.dp)
+                        .size(64.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
@@ -436,11 +460,11 @@ private fun NotLoggedInSection(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = "NeliPlay Swahili",
                         tint = NeliCyanAccent,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(34.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -467,99 +491,294 @@ private fun NotLoggedInSection(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Tazama filamu na tamthilia zilizotafsiriwa kwa Kiswahili. Ingia ili kuhifadhi filamu zako uzipendazo.",
+                    text = if (isSignUpTab) "Unda akaunti yako mpya ukitumia jina, barua pepe na nenosiri."
+                    else "Ingia ukitumia barua pepe/jina la mtumiaji na nenosiri.",
                     fontSize = 13.sp,
                     color = NeliTextSecondary,
                     textAlign = TextAlign.Center,
                     lineHeight = 18.sp,
-                    modifier = Modifier.padding(horizontal = 12.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp)
                 )
 
-                Spacer(modifier = Modifier.height(22.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                // BUTTON: Continue with Google
-                Button(
-                    onClick = onGoogleSignIn,
-                    enabled = !isGoogleSigningIn && !isGuestSigningIn,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
-                        contentColor = Color(0xFF1F1F1F),
-                        disabledContainerColor = Color.White.copy(alpha = 0.7f),
-                        disabledContentColor = Color(0xFF1F1F1F).copy(alpha = 0.7f)
-                    ),
-                    shape = RoundedCornerShape(14.dp),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
+                // Tab Selector (Ingia vs Jisajili)
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("continue_with_google_button")
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(NeliSurfaceVariant)
+                        .padding(4.dp)
                 ) {
-                    if (isGoogleSigningIn) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            color = NeliBluePrimary,
-                            strokeWidth = 2.5.dp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(if (!isSignUpTab) NeliBluePrimary else Color.Transparent)
+                            .clickable { isSignUpTab = false }
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
-                            text = "Connecting Google...",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF1F1F1F)
+                            text = "Ingia (Sign In)",
+                            fontWeight = if (!isSignUpTab) FontWeight.Bold else FontWeight.Normal,
+                            color = if (!isSignUpTab) Color.White else NeliTextSecondary,
+                            fontSize = 13.sp
                         )
-                    } else {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_google_logo),
-                                contentDescription = "Google Logo",
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(22.dp)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(if (isSignUpTab) NeliBluePrimary else Color.Transparent)
+                            .clickable { isSignUpTab = true }
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Jisajili (Sign Up)",
+                            fontWeight = if (isSignUpTab) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSignUpTab) Color.White else NeliTextSecondary,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                if (isSignUpTab) {
+                    // SIGN UP FORM: Username, Email, Password
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = { username = it },
+                        label = { Text("Jina la mtumiaji (Username)") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = NeliCyanAccent)
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeliCyanAccent,
+                            unfocusedBorderColor = NeliSurfaceVariant,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedLabelColor = NeliCyanAccent,
+                            unfocusedLabelColor = NeliTextSecondary
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("signup_username_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Barua pepe (Email)") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Email, contentDescription = null, tint = NeliCyanAccent)
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeliCyanAccent,
+                            unfocusedBorderColor = NeliSurfaceVariant,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedLabelColor = NeliCyanAccent,
+                            unfocusedLabelColor = NeliTextSecondary
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("signup_email_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Nenosiri (Angalau herufi 6)") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = NeliCyanAccent)
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = "Toggle password visibility",
+                                    tint = NeliTextSecondary
+                                )
+                            }
+                        },
+                        visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeliCyanAccent,
+                            unfocusedBorderColor = NeliSurfaceVariant,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedLabelColor = NeliCyanAccent,
+                            unfocusedLabelColor = NeliTextSecondary
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("signup_password_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    Button(
+                        onClick = { onSignUp(email, password, username) },
+                        enabled = !isSigningUp && username.isNotBlank() && email.isNotBlank() && password.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NeliBluePrimary,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("submit_signup_button")
+                    ) {
+                        if (isSigningUp) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "Continue with Google",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1F1F1F)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text("Inasajili...", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Text("Fungua Akaunti (Sign Up)", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else {
+                    // SIGN IN FORM: Email or Username, Password
+                    OutlinedTextField(
+                        value = emailOrUsername,
+                        onValueChange = { emailOrUsername = it },
+                        label = { Text("Barua pepe au Jina la mtumiaji") },
+                        leadingIcon = {
+                            Icon(Icons.Default.AccountCircle, contentDescription = null, tint = NeliCyanAccent)
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeliCyanAccent,
+                            unfocusedBorderColor = NeliSurfaceVariant,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedLabelColor = NeliCyanAccent,
+                            unfocusedLabelColor = NeliTextSecondary
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("signin_email_username_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Nenosiri") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = NeliCyanAccent)
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = "Toggle password visibility",
+                                    tint = NeliTextSecondary
+                                )
+                            }
+                        },
+                        visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeliCyanAccent,
+                            unfocusedBorderColor = NeliSurfaceVariant,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedLabelColor = NeliCyanAccent,
+                            unfocusedLabelColor = NeliTextSecondary
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("signin_password_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    Button(
+                        onClick = { onSignIn(emailOrUsername, password) },
+                        enabled = !isSigningIn && emailOrUsername.isNotBlank() && password.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NeliBluePrimary,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("submit_signin_button")
+                    ) {
+                        if (isSigningIn) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
                             )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text("Inaingia...", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Text("Ingia (Sign In)", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // BUTTON: Instant Quick Sign-In (Ingia Mara Moja)
-                Button(
+                // Guest / Quick sign-in
+                OutlinedButton(
                     onClick = onQuickSignIn,
-                    enabled = !isGoogleSigningIn && !isGuestSigningIn,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = NeliBluePrimary,
-                        contentColor = Color.White
+                    enabled = !isGuestSigningIn && !isSigningIn && !isSigningUp,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = NeliCyanAccent
                     ),
-                    shape = RoundedCornerShape(14.dp),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = Brush.horizontalGradient(
+                            listOf(NeliSurfaceVariant, NeliCyanAccent.copy(alpha = 0.5f))
+                        )
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(46.dp)
                         .testTag("quick_signin_button")
                 ) {
                     if (isGuestSigningIn) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = Color.White,
+                            modifier = Modifier.size(18.dp),
+                            color = NeliCyanAccent,
                             strokeWidth = 2.dp
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Inaingia...",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Inaingia...", fontSize = 13.sp)
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
@@ -570,9 +789,9 @@ private fun NotLoggedInSection(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Ingia Mara Moja (Instant 1-Click)",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
+                                text = "Ingia kama Mgeni (Guest Mode)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
                                 color = Color.White
                             )
                         }
@@ -581,48 +800,26 @@ private fun NotLoggedInSection(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // BUTTON: Continue without account
-                OutlinedButton(
+                // Continue without account
+                TextButton(
                     onClick = onContinueWithoutAccount,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = NeliTextPrimary
-                    ),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(
-                        brush = Brush.horizontalGradient(
-                            listOf(NeliSurfaceVariant, NeliBluePrimary.copy(alpha = 0.5f))
-                        )
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(46.dp)
-                        .testTag("continue_without_account_button")
+                    modifier = Modifier.testTag("continue_without_account_button")
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Explore,
                             contentDescription = null,
-                            tint = NeliCyanAccent,
-                            modifier = Modifier.size(18.dp)
+                            tint = NeliTextSecondary,
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Endelea bila akaunti (Free Browse)",
+                            text = "Endelea bila akaunti (Tazama Bure)",
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = NeliTextPrimary
+                            color = NeliTextSecondary
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text(
-                    text = "Unaweza kutazama filamu zote za Kiswahili bila kizuizi chochote.",
-                    fontSize = 11.sp,
-                    color = NeliTextSecondary.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center
-                )
             }
         }
 

@@ -1,5 +1,6 @@
 package com.example.ui.home
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,11 +26,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.cast.NeliPlayCastButton
@@ -40,9 +46,11 @@ import com.example.ui.components.MovieCard
 import com.example.ui.components.NeliPlayLogo
 import com.example.ui.components.NeliPullRefreshBox
 import com.example.ui.components.SectionHeader
+import com.example.ui.components.WidgetPinPromptDialog
 import com.example.ui.series.SeriesCard
 import com.example.ui.theme.NeliCyanAccent
 import com.example.ui.theme.NeliVoid
+import com.example.widget.NeliPlayWidgetProvider
 
 @Composable
 fun HomeScreen(
@@ -56,6 +64,37 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    // Sync newest movie with the Home Screen Widget
+    LaunchedEffect(uiState.latestMovies, uiState.featuredMovies) {
+        val firstMovie = uiState.latestMovies.firstOrNull() ?: uiState.featuredMovies.firstOrNull()
+        if (firstMovie != null) {
+            NeliPlayWidgetProvider.updateLatestMovie(context, firstMovie.title, firstMovie.id)
+        }
+    }
+
+    // Prompt user on installation / first run to allow our home screen widget for new movies
+    val prefs = remember { context.getSharedPreferences("neliplay_widget_prefs", Context.MODE_PRIVATE) }
+    var showWidgetPrompt by remember {
+        mutableStateOf(!prefs.getBoolean("widget_prompt_handled", false))
+    }
+
+    if (showWidgetPrompt) {
+        WidgetPinPromptDialog(
+            onDismiss = {
+                prefs.edit().putBoolean("widget_prompt_handled", true).apply()
+                showWidgetPrompt = false
+            },
+            onAllow = {
+                prefs.edit()
+                    .putBoolean("widget_prompt_handled", true)
+                    .putBoolean("widget_pinned", true)
+                    .apply()
+                showWidgetPrompt = false
+            }
+        )
+    }
 
     Scaffold(
         topBar = {

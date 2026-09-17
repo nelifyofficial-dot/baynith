@@ -104,7 +104,7 @@ sealed class Screen(val route: String, val title: String, val selectedIcon: Imag
 
 val bottomNavItems = listOf(
     Screen.Home,
-    Screen.Search,
+    Screen.Tv,
     Screen.Downloads,
     Screen.Library,
     Screen.Account
@@ -271,7 +271,8 @@ fun NeliPlayApp(
                     viewModel = tvVm,
                     onChannelClick = { channelId ->
                         navController.navigate(Screen.Player.createRoute(channelId, isLive = true))
-                    }
+                    },
+                    onSearchClick = { navController.navigate(Screen.Search.route) }
                 )
             }
 
@@ -305,7 +306,8 @@ fun NeliPlayApp(
                     },
                     onBrowseMovies = {
                         navController.navigate(Screen.Home.route)
-                    }
+                    },
+                    onSearchClick = { navController.navigate(Screen.Search.route) }
                 )
             }
 

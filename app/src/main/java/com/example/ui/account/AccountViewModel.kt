@@ -24,7 +24,8 @@ data class AccountUiState(
     val currentUser: FirebaseUser? = null,
     val profile: UserProfile? = null,
     val userCountry: String = "",
-    val isGoogleSigningIn: Boolean = false,
+    val isSigningIn: Boolean = false,
+    val isSigningUp: Boolean = false,
     val isGuestSigningIn: Boolean = false,
     val isDeletingAccount: Boolean = false,
     val favoritesCount: Int = 0,
@@ -48,6 +49,7 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
     private val userDataRepo = UserDataRepository(application)
 
     private val _isSigningIn = MutableStateFlow(false)
+    private val _isSigningUp = MutableStateFlow(false)
     private val _isGuestSigningIn = MutableStateFlow(false)
     private val _isDeleting = MutableStateFlow(false)
     private val _message = MutableStateFlow<String?>(null)
@@ -60,10 +62,11 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
 
     private val loadingStateFlow = combine(
         _isSigningIn,
+        _isSigningUp,
         _isGuestSigningIn,
         _isDeleting
-    ) { googleSign, guestSign, deleting ->
-        Triple(googleSign, guestSign, deleting)
+    ) { signin, signup, guest, deleting ->
+        listOf(signin, signup, guest, deleting)
     }
 
     private val messageFlow = combine(_message, _error) { msg, err ->
@@ -79,14 +82,15 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
                 statsFlow,
                 loadingStateFlow,
                 messageFlow
-            ) { profile, localCountry, (favCount, cwCount), (isGoogle, isGuest, isDel), (msg, err) ->
+            ) { profile, localCountry, (favCount, cwCount), loadingList, (msg, err) ->
                 AccountUiState(
                     currentUser = user,
                     profile = profile,
                     userCountry = localCountry,
-                    isGoogleSigningIn = isGoogle,
-                    isGuestSigningIn = isGuest,
-                    isDeletingAccount = isDel,
+                    isSigningIn = loadingList[0],
+                    isSigningUp = loadingList[1],
+                    isGuestSigningIn = loadingList[2],
+                    isDeletingAccount = loadingList[3],
                     favoritesCount = favCount,
                     continueWatchingCount = cwCount,
                     message = msg,
@@ -109,25 +113,54 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun signInWithGoogle(context: Context) {
+    fun signIn(emailOrUsername: String, pass: String) {
+        if (emailOrUsername.isBlank() || pass.isBlank()) {
+            _error.value = "Tafadhali jaza barua pepe/jina na nenosiri."
+            return
+        }
         viewModelScope.launch {
             _isSigningIn.value = true
             _error.value = null
             _message.value = null
 
-            val result = authRepo.signInWithGoogle(context)
+            val result = authRepo.signInWithEmail(emailOrUsername, pass)
             _isSigningIn.value = false
 
             result.onSuccess { user ->
-                // Sync and merge local favorites and watch history to cloud
                 val currentCountry = userDataRepo.userCountry.firstOrNull() ?: RegionService.DEFAULT_COUNTRY_CODE
                 authRepo.syncUserProfile(user, country = currentCountry)
                 userDataRepo.syncUserDataWithFirebase(user.uid)
-                _message.value = "Welcome, ${user.displayName ?: "NeliPlay User"}!"
+                _message.value = "Karibu tena, ${user.displayName ?: "Mtumiaji"}!"
             }.onFailure { err ->
-                if (err.message != "Sign-in canceled") {
-                    _error.value = err.message ?: "Failed to sign in with Google."
-                }
+                _error.value = err.message ?: "Kuingia kumeshindwa."
+            }
+        }
+    }
+
+    fun signUp(email: String, pass: String, username: String) {
+        if (email.isBlank() || pass.isBlank() || username.isBlank()) {
+            _error.value = "Tafadhali jaza jina la mtumiaji, barua pepe, na nenosiri."
+            return
+        }
+        if (pass.length < 6) {
+            _error.value = "Nenosiri linapaswa kuwa na angalau herufi 6."
+            return
+        }
+        viewModelScope.launch {
+            _isSigningUp.value = true
+            _error.value = null
+            _message.value = null
+
+            val result = authRepo.signUpWithEmail(email, pass, username)
+            _isSigningUp.value = false
+
+            result.onSuccess { user ->
+                val currentCountry = userDataRepo.userCountry.firstOrNull() ?: RegionService.DEFAULT_COUNTRY_CODE
+                authRepo.syncUserProfile(user, country = currentCountry)
+                userDataRepo.syncUserDataWithFirebase(user.uid)
+                _message.value = "Akaunti yako imeundwa vizuri! Karibu, ${user.displayName ?: username}!"
+            }.onFailure { err ->
+                _error.value = err.message ?: "Usajili umeshindwa."
             }
         }
     }
@@ -145,9 +178,9 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
                 val currentCountry = userDataRepo.userCountry.firstOrNull() ?: RegionService.DEFAULT_COUNTRY_CODE
                 authRepo.syncUserProfile(user, country = currentCountry)
                 userDataRepo.syncUserDataWithFirebase(user.uid)
-                _message.value = "Welcome, Guest!"
+                _message.value = "Karibu kama Mgeni!"
             }.onFailure { err ->
-                _error.value = err.message ?: "Failed to sign in as guest."
+                _error.value = err.message ?: "Kuingia kama mgeni kumeshindwa."
             }
         }
     }
@@ -161,18 +194,18 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
                 authRepo.updateUserCountry(user.uid, upper)
             }
             val countryName = RegionService.getCountryName(upper)
-            _message.value = "Region updated to $countryName"
+            _message.value = "Nchi imebadilishwa kuwa $countryName"
         }
     }
 
-    fun signOut(context: Context) {
+    fun signOut(context: Context? = null) {
         viewModelScope.launch {
             authRepo.signOut(context)
-            _message.value = "Signed out successfully."
+            _message.value = "Umetoka kwenye akaunti kikamilifu."
         }
     }
 
-    fun deleteAccount(context: Context) {
+    fun deleteAccount(context: Context? = null) {
         viewModelScope.launch {
             _isDeleting.value = true
             _error.value = null
@@ -181,9 +214,9 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
             _isDeleting.value = false
 
             result.onSuccess {
-                _message.value = "Your account has been deleted."
+                _message.value = "Akaunti yako imefutwa kikamilifu."
             }.onFailure { err ->
-                _error.value = err.message ?: "Failed to delete account."
+                _error.value = err.message ?: "Kufuta akaunti kumeshindwa."
             }
         }
     }

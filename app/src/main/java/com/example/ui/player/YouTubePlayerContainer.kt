@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PictureInPicture
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay10
@@ -107,6 +108,7 @@ fun YouTubePlayerContainer(
     onRetry: () -> Unit,
     onToggleMute: () -> Unit,
     onToggleFullscreen: () -> Unit,
+    onEnterPip: (() -> Unit)? = null,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -434,11 +436,23 @@ fun YouTubePlayerContainer(
                             }
                         }
                     } else if (isBuffering) {
-                        CircularProgressIndicator(
-                            color = YouTubeRed,
-                            strokeWidth = 3.5.dp,
-                            modifier = Modifier.size(if (isFullscreen) 56.dp else 44.dp)
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = YouTubeRed,
+                                strokeWidth = 3.5.dp,
+                                modifier = Modifier.size(if (isFullscreen) 56.dp else 44.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Inapakia...",
+                                color = Color.White,
+                                fontSize = if (isFullscreen) 13.sp else 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     } else {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -622,6 +636,21 @@ fun YouTubePlayerContainer(
                                     tint = Color.White,
                                     modifier = Modifier.size(if (isFullscreen) 22.dp else 18.dp)
                                 )
+                            }
+
+                            // Picture-in-Picture Toggle
+                            if (onEnterPip != null) {
+                                IconButton(
+                                    onClick = onEnterPip,
+                                    modifier = Modifier.size(if (isFullscreen) 40.dp else 32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PictureInPicture,
+                                        contentDescription = "Picture in Picture",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(if (isFullscreen) 22.dp else 18.dp)
+                                    )
+                                }
                             }
 
                             // Fullscreen Toggle

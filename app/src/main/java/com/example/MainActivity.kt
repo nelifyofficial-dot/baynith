@@ -36,19 +36,6 @@ class MainActivity : FragmentActivity() {
         // Sanitize WebView cache directory structure to prevent Chromium SimpleCache ENOENT/corrupt index errors
         com.example.ui.player.embed.NeliPlayEmbedUtils.sanitizeWebViewEnvironment(this)
 
-        // Initialize Google Mobile Ads SDK (AdMob) in background coroutine to prevent main-thread binder/service stalls
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val reqConfig = com.google.android.gms.ads.RequestConfiguration.Builder()
-                    .setTestDeviceIds(listOf(com.google.android.gms.ads.AdRequest.DEVICE_ID_EMULATOR))
-                    .build()
-                com.google.android.gms.ads.MobileAds.setRequestConfiguration(reqConfig)
-                com.google.android.gms.ads.MobileAds.initialize(applicationContext) {}
-            } catch (e: Exception) {
-                android.util.Log.e("MainActivity", "MobileAds initialization error: ${e.message}")
-            }
-        }
-
         // Initialize NeliPlay notification channel
         NeliPlayNotificationManager.createNotificationChannel(this)
         com.example.util.NeliNotificationManager.initChannels(this)
@@ -94,5 +81,30 @@ class MainActivity : FragmentActivity() {
         } else if (!navigateId.isNullOrBlank()) {
             initialNavigateMovieId = navigateId
         }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (isPlayerActive && isPlayerPlaying) {
+            enterPictureInPicture()
+        }
+    }
+
+    fun enterPictureInPicture() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val params = android.app.PictureInPictureParams.Builder()
+                    .setAspectRatio(android.util.Rational(16, 9))
+                    .build()
+                enterPictureInPictureMode(params)
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Failed entering PiP: ${e.message}")
+            }
+        }
+    }
+
+    companion object {
+        var isPlayerActive: Boolean = false
+        var isPlayerPlaying: Boolean = false
     }
 }

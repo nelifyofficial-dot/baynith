@@ -151,7 +151,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     val localFile = download?.localFilePath?.let { File(it) }
                     val isOfflinePlayable = download?.status == DownloadState.COMPLETED && localFile != null && localFile.exists()
                     val savedPosition = savedProgress?.positionMs ?: 0L
-                    val isMovieTarget = movie != null || (!isEpisodeId && episode == null)
+                    // Autocut is strictly for single movies only, NEVER for series or episodes
+                    val isMovieTarget = movie != null && episode == null
 
                     // Automatic cut for movie starts at 5 mins and 30 secs (330,000 ms)
                     val (movieResumePosition, movieAutoCut) = if (isMovieTarget && autoSkip) {
@@ -302,10 +303,25 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             isNextEpisodePreloaded = nextEp?.id != null && EpisodePreloadManager.isEpisodePreloaded(nextEp.id)
                         )
                     } else {
-                        _uiState.value = PlayerUiState(
-                            isLoading = false,
-                            error = "Video stream could not be loaded. Please check your internet connection."
-                        )
+                        // Series resolution: if contentId was a series ID, play its first episode
+                        val targetSeries = seriesRepo.getSeriesById(contentId).firstOrNull()
+                        if (targetSeries != null) {
+                            val seriesEps = episodeRepo.getEpisodesForSeries(targetSeries.id).firstOrNull() ?: emptyList()
+                            val firstEpisode = seriesEps.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber })).firstOrNull()
+                            if (firstEpisode != null) {
+                                loadMedia(firstEpisode.id, false)
+                            } else {
+                                _uiState.value = PlayerUiState(
+                                    isLoading = false,
+                                    error = "No episodes found for this series."
+                                )
+                            }
+                        } else {
+                            _uiState.value = PlayerUiState(
+                                isLoading = false,
+                                error = "Video stream could not be loaded. Please check your internet connection."
+                            )
+                        }
                     }
                 }
             }
