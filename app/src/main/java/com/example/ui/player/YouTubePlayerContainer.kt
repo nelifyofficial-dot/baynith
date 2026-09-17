@@ -6,6 +6,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
@@ -89,6 +93,12 @@ fun YouTubePlayerContainer(
     isFullscreen: Boolean,
     exoPlayer: ExoPlayer,
     playerView: PlayerView,
+    isMovie: Boolean = false,
+    autoSkipIntro: Boolean = true,
+    showAutoSkippedNotice: Boolean = false,
+    onDismissAutoSkipNotice: (() -> Unit)? = null,
+    onToggleAutoSkipIntro: (() -> Unit)? = null,
+    onSkipIntro: (() -> Unit)? = null,
     onBack: () -> Unit,
     onPlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
@@ -266,7 +276,8 @@ fun YouTubePlayerContainer(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .statusBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -302,6 +313,34 @@ fun YouTubePlayerContainer(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        // Auto-Skip Toggle Chip (for Movies)
+                        if (isMovie) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (autoSkipIntro) NeliCyanAccent.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.12f))
+                                    .border(1.dp, if (autoSkipIntro) NeliCyanAccent.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                    .clickable { onToggleAutoSkipIntro?.invoke() }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.FastForward,
+                                        contentDescription = "Auto-Skip 5:30",
+                                        tint = if (autoSkipIntro) NeliCyanAccent else Color.White.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (autoSkipIntro) "Auto-Skip 5:30" else "Auto-Skip Off",
+                                        color = if (autoSkipIntro) Color.White else Color.White.copy(alpha = 0.7f),
+                                        fontSize = if (isFullscreen) 11.sp else 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
                         // Settings Icon
                         IconButton(
                             onClick = onOpenSettings,
@@ -312,6 +351,54 @@ fun YouTubePlayerContainer(
                                 contentDescription = "Settings",
                                 tint = Color.White,
                                 modifier = Modifier.size(if (isFullscreen) 24.dp else 18.dp)
+                            )
+                        }
+                    }
+                }
+
+                // AUTO-SKIPPED NOTICE BANNER
+                AnimatedVisibility(
+                    visible = showAutoSkippedNotice,
+                    enter = fadeIn() + slideInVertically(),
+                    exit = fadeOut() + slideOutVertically(),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = if (isFullscreen) 56.dp else 42.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color(0xE60F172A))
+                            .border(1.dp, NeliCyanAccent.copy(alpha = 0.7f), RoundedCornerShape(20.dp))
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FastForward,
+                                contentDescription = null,
+                                tint = NeliCyanAccent,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Intro Auto-Skipped (Started at 05:30)",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "Undo",
+                                color = NeliCyanAccent,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable {
+                                        onSeek(0L)
+                                        onDismissAutoSkipNotice?.invoke()
+                                    }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
                             )
                         }
                     }
@@ -422,6 +509,43 @@ fun YouTubePlayerContainer(
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
+                    // Skip Intro (05:30) Quick Action Button (for Movies in first 5m 30s)
+                    if (!isLive && isMovie && playbackPosition < 330_000L && playbackDuration > 330_000L) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 4.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xFF0F172A).copy(alpha = 0.9f))
+                                    .border(1.dp, NeliCyanAccent.copy(alpha = 0.85f), RoundedCornerShape(16.dp))
+                                    .clickable {
+                                        onSkipIntro?.invoke() ?: onSeek(330_000L)
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 5.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.FastForward,
+                                        contentDescription = "Skip Intro",
+                                        tint = NeliCyanAccent,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = "Skip Intro (05:30)",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     var isDragging by remember { mutableStateOf(false) }
                     var dragPosition by remember { mutableFloatStateOf(0f) }
 

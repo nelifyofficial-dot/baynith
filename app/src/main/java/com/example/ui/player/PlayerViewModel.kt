@@ -29,6 +29,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+const val MOVIE_AUTOSKIP_OFFSET_MS = 330_000L // 5 minutes and 30 seconds (automatic start cut)
+
 data class PlayerUiState(
     val isLoading: Boolean = true,
     val movie: Movie? = null,
@@ -41,7 +43,8 @@ data class PlayerUiState(
     val embedCode: String = "",
     val isLive: Boolean = false,
     val isOffline: Boolean = false,
-    val autoSkipIntro: Boolean = false,
+    val autoSkipIntro: Boolean = true,
+    val movieAutoCutApplied: Boolean = false,
     val isSwahiliNarrated: Boolean = false,
     val initialPositionMs: Long = 0L,
     val isFavorite: Boolean = false,
@@ -60,6 +63,7 @@ data class PlayerUiState(
 ) {
     val isEmbed: Boolean get() = playbackType.equals("embed", ignoreCase = true) && mediaUrl.isBlank()
     val isSeries: Boolean get() = series != null || episode != null || seasons.isNotEmpty()
+    val isMovie: Boolean get() = movie != null && episode == null
     val displayTitle: String get() = movie?.title ?: episode?.title ?: tvChannel?.name ?: "NeliPlay"
 }
 
@@ -146,7 +150,20 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
                     val localFile = download?.localFilePath?.let { File(it) }
                     val isOfflinePlayable = download?.status == DownloadState.COMPLETED && localFile != null && localFile.exists()
-                    val resumePosition = savedProgress?.positionMs ?: 0L
+                    val savedPosition = savedProgress?.positionMs ?: 0L
+                    val isMovieTarget = movie != null || (!isEpisodeId && episode == null)
+
+                    // Automatic cut for movie starts at 5 mins and 30 secs (330,000 ms)
+                    val (movieResumePosition, movieAutoCut) = if (isMovieTarget && autoSkip) {
+                        if (savedPosition > MOVIE_AUTOSKIP_OFFSET_MS + 10_000L) {
+                            Pair(savedPosition, false)
+                        } else {
+                            Pair(MOVIE_AUTOSKIP_OFFSET_MS, true)
+                        }
+                    } else {
+                        Pair(savedPosition, false)
+                    }
+                    val resumePosition = if (isMovieTarget) movieResumePosition else savedPosition
 
                     var fetchedSeries: Series? = null
                     var fetchedSeriesName: String? = null
@@ -212,6 +229,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             isLive = false,
                             isOffline = true,
                             autoSkipIntro = autoSkip,
+                            movieAutoCutApplied = if (isMovieTarget) movieAutoCut else false,
                             isSwahiliNarrated = isSwahili,
                             initialPositionMs = resumePosition,
                             isFavorite = isFav,
@@ -239,6 +257,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             isLive = false,
                             isOffline = false,
                             autoSkipIntro = autoSkip,
+                            movieAutoCutApplied = movieAutoCut,
                             isSwahiliNarrated = isSwahili,
                             initialPositionMs = resumePosition,
                             isFavorite = isFav,
@@ -376,6 +395,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 positionMs = positionMs,
                 durationMs = durationMs
             )
+        }
+    }
+
+    fun toggleAutoSkipIntro(enabled: Boolean) {
+        val current = _uiState.value
+        _uiState.value = current.copy(autoSkipIntro = enabled)
+        viewModelScope.launch(Dispatchers.IO) {
+            userDataRepo.setAutoSkipIntro(enabled)
         }
     }
 

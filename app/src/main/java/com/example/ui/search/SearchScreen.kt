@@ -56,6 +56,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -97,7 +98,7 @@ fun SearchScreen(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    val typeFilters = listOf("All", "Movies", "Live Streams", "Series")
+    val typeFilters = listOf("All", "Movies", "TV Shows", "TV Channels")
 
     Scaffold(
         topBar = {
@@ -108,7 +109,7 @@ fun SearchScreen(
                     .statusBarsPadding()
                     .padding(top = 8.dp, bottom = 10.dp)
             ) {
-                // 1. Query Bar & Navigation Back Button
+                // 1. YouTube-style Query Bar & Navigation Back Button
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -135,7 +136,7 @@ fun SearchScreen(
                         onValueChange = { viewModel.onQueryChange(it) },
                         placeholder = {
                             Text(
-                                text = "Search by title or genre...",
+                                text = "Search movies, TV shows, channels...",
                                 color = NeliTextSecondary,
                                 fontSize = 14.sp,
                                 maxLines = 1,
@@ -185,7 +186,7 @@ fun SearchScreen(
                             unfocusedTextColor = Color.White,
                             cursorColor = NeliCyanAccent
                         ),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(24.dp),
                         modifier = Modifier
                             .weight(1f)
                             .testTag("search_input_field")
@@ -194,7 +195,7 @@ fun SearchScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // 2. Type Filter Pills (All, Movies, Live Streams, Series)
+                // 2. Type Filter Pills (All, Movies, TV Shows, TV Channels)
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -202,13 +203,14 @@ fun SearchScreen(
                 ) {
                     items(typeFilters) { filter ->
                         val isSelected = uiState.selectedFilter == filter ||
-                                (filter == "Live Streams" && uiState.selectedFilter == "Live TV")
+                                (filter == "TV Channels" && (uiState.selectedFilter == "Live Streams" || uiState.selectedFilter == "Live TV")) ||
+                                (filter == "TV Shows" && uiState.selectedFilter == "Series")
                         val filterTag = "search_filter_${filter.replace(" ", "_")}"
 
                         val icon = when (filter) {
                             "Movies" -> Icons.Default.Movie
-                            "Live Streams" -> Icons.Default.LiveTv
-                            "Series" -> Icons.Default.Tv
+                            "TV Shows" -> Icons.Default.Tv
+                            "TV Channels" -> Icons.Default.LiveTv
                             else -> Icons.Default.FilterList
                         }
 
@@ -454,39 +456,68 @@ fun SearchScreen(
                         }
                     }
 
-                    // 1. LIVE STREAMS SECTION
-                    if (uiState.channels.isNotEmpty()) {
+                    // YouTube-style autocomplete suggestions as user types
+                    if (uiState.query.isNotBlank() && uiState.suggestions.isNotEmpty()) {
                         item {
-                            SectionHeader(
-                                title = "🔴 Live Streams (${uiState.channels.size})"
-                            )
-                        }
-
-                        // Display TV Channels
-                        items(uiState.channels, key = { "tv_${it.id}" }) { channel ->
-                            Box(
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 5.dp)
+                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(NeliSurface)
+                                    .border(1.dp, NeliBorder, RoundedCornerShape(14.dp))
                             ) {
-                                TvChannelCard(
-                                    channel = channel,
-                                    onClick = {
-                                        if (uiState.query.isNotBlank()) {
-                                            viewModel.commitSearch(uiState.query)
+                                uiState.suggestions.forEach { suggestion ->
+                                    val isRecent = uiState.recentSearches.contains(suggestion)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                viewModel.onQueryChange(suggestion)
+                                                viewModel.commitSearch(suggestion)
+                                                focusManager.clearFocus()
+                                                keyboardController?.hide()
+                                            }
+                                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isRecent) Icons.Default.History else Icons.Default.Search,
+                                            contentDescription = null,
+                                            tint = if (isRecent) NeliCyanAccent else NeliTextSecondary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = suggestion,
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Normal,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                viewModel.onQueryChange(suggestion)
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                                contentDescription = "Insert query",
+                                                tint = NeliTextSecondary,
+                                                modifier = Modifier
+                                                    .size(16.dp)
+                                                    .rotate(135f)
+                                            )
                                         }
-                                        onChannelClick(channel.id)
                                     }
-                                )
+                                }
                             }
-                        }
-
-                        item {
-                            Spacer(modifier = Modifier.height(14.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
                     }
 
-                    // 2. MOVIES SECTION
+                    // 1. MOVIES SECTION (Movies Appears First)
                     if (uiState.movies.isNotEmpty()) {
                         item {
                             SectionHeader(
@@ -528,11 +559,11 @@ fun SearchScreen(
                         }
                     }
 
-                    // 3. TV SERIES SECTION
+                    // 2. TV SHOWS & SERIES SECTION (TV Shows Appears Second)
                     if (uiState.series.isNotEmpty()) {
                         item {
                             SectionHeader(
-                                title = "📺 TV Series (${uiState.series.size})"
+                                title = "📺 TV Shows (${uiState.series.size})"
                             )
                         }
 
@@ -560,6 +591,42 @@ fun SearchScreen(
                                     Spacer(modifier = Modifier.weight(1f))
                                 }
                             }
+                        }
+
+                        item {
+                            Spacer(modifier = Modifier.height(14.dp))
+                        }
+                    }
+
+                    // 3. TV CHANNELS SECTION (TV Channels Appears Third)
+                    if (uiState.channels.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "🔴 TV Channels (${uiState.channels.size})"
+                            )
+                        }
+
+                        // Display TV Channels
+                        items(uiState.channels, key = { "tv_${it.id}" }) { channel ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 5.dp)
+                            ) {
+                                TvChannelCard(
+                                    channel = channel,
+                                    onClick = {
+                                        if (uiState.query.isNotBlank()) {
+                                            viewModel.commitSearch(uiState.query)
+                                        }
+                                        onChannelClick(channel.id)
+                                    }
+                                )
+                            }
+                        }
+
+                        item {
+                            Spacer(modifier = Modifier.height(14.dp))
                         }
                     }
                 }

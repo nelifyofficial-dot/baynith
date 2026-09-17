@@ -157,7 +157,7 @@ class UserDataRepository(context: Context) {
     }
 
     val autoSkipIntroPreference: Flow<Boolean> = appContext.dataStore.data.map { prefs ->
-        prefs[KEY_AUTO_SKIP_INTRO] ?: false
+        prefs[KEY_AUTO_SKIP_INTRO] ?: true
     }
 
     val recentSearches: Flow<List<String>> = appContext.dataStore.data.map { prefs ->

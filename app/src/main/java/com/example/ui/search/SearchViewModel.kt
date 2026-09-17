@@ -24,10 +24,11 @@ import kotlinx.coroutines.launch
 
 data class SearchUiState(
     val query: String = "",
-    val selectedFilter: String = "All", // "All", "Movies", "Live Streams", "Series"
+    val selectedFilter: String = "All", // "All", "Movies", "TV Shows", "TV Channels"
     val selectedGenre: String = "All",
     val availableGenres: List<String> = emptyList(),
     val recentSearches: List<String> = emptyList(),
+    val suggestions: List<String> = emptyList(),
     val movies: List<Movie> = emptyList(),
     val series: List<Series> = emptyList(),
     val channels: List<TvChannel> = emptyList(),
@@ -121,7 +122,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), defaultGenres)
 
     private val debouncedQuery = _searchQuery
-        .debounce(150L)
+        .debounce(50L)
         .distinctUntilChanged()
 
     private val searchParamsFlow = combine(debouncedQuery, _selectedFilter, _selectedGenre) { query, filter, genre ->
@@ -171,17 +172,29 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             matchesGenre && matchesQuery
         }
 
-        // Apply type filter: "All", "Movies", "Live Streams" (or "Live TV"), "Series"
+        // Apply type filter: "All", "Movies", "TV Shows" (or "Series"), "TV Channels" (or "Live Streams" / "Live TV")
         val showMovies = params.filter == "All" || params.filter == "Movies"
-        val showChannels = params.filter == "All" || params.filter == "Live Streams" || params.filter == "Live TV"
-        val showSeries = params.filter == "All" || params.filter == "Series"
+        val showChannels = params.filter == "All" || params.filter == "TV Channels" || params.filter == "Live Streams" || params.filter == "Live TV"
+        val showSeries = params.filter == "All" || params.filter == "TV Shows" || params.filter == "Series"
+
+        // Autocomplete suggestions like YouTube as the user types
+        val suggestions = if (cleanQuery.isNotEmpty()) {
+            val fromRecent = recentSearches.value.filter { it.lowercase().contains(cleanQuery) }
+            val fromMovies = allMovies.filter { it.title.lowercase().contains(cleanQuery) }.map { it.title }
+            val fromSeries = allSeries.filter { it.name.lowercase().contains(cleanQuery) }.map { it.name }
+            val fromChannels = allChannels.filter { it.name.lowercase().contains(cleanQuery) }.map { it.name }
+            (fromRecent + fromMovies + fromSeries + fromChannels).distinct().take(8)
+        } else {
+            emptyList()
+        }
 
         SearchUiState(
-            query = params.query,
+            query = _searchQuery.value,
             selectedFilter = params.filter,
             selectedGenre = params.genre,
             availableGenres = availableGenresFlow.value,
             recentSearches = recentSearches.value,
+            suggestions = suggestions,
             movies = if (showMovies) filteredMovies else emptyList(),
             channels = if (showChannels) filteredChannels else emptyList(),
             series = if (showSeries) filteredSeries else emptyList(),

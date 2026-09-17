@@ -165,8 +165,8 @@ fun SettingsScreen(
 
                         SettingsSwitchRow(
                             icon = Icons.Default.PlayCircleOutline,
-                            title = "Auto-skip Intro Segment",
-                            subtitle = "Automatically skip initial promotional intro in first 10 seconds",
+                            title = "Auto-skip Movie Intro",
+                            subtitle = "Automatically start all movies at 5m 30s (cuts initial movie start)",
                             checked = uiState.autoSkipIntro,
                             onCheckedChange = { viewModel.toggleAutoSkipIntro(it) }
                         )

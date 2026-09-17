@@ -13,6 +13,9 @@ import androidx.compose.runtime.setValue
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.example.data.firebase.FirebaseManager
 import com.example.ui.navigation.NeliPlayApp
 import com.example.ui.theme.NeliPlayTheme
@@ -30,14 +33,20 @@ class MainActivity : FragmentActivity() {
         // Initialize Firebase and Firestore with offline cache
         FirebaseManager.init(this)
 
-        // Prewarm WebView cache directory structure to prevent Chromium ENOENT directory scan errors
-        com.example.ui.player.embed.NeliPlayEmbedUtils.prewarmWebViewEnvironment(this)
+        // Sanitize WebView cache directory structure to prevent Chromium SimpleCache ENOENT/corrupt index errors
+        com.example.ui.player.embed.NeliPlayEmbedUtils.sanitizeWebViewEnvironment(this)
 
-        // Initialize Google Mobile Ads SDK (AdMob)
-        try {
-            com.google.android.gms.ads.MobileAds.initialize(this) {}
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "MobileAds initialization error: ${e.message}")
+        // Initialize Google Mobile Ads SDK (AdMob) in background coroutine to prevent main-thread binder/service stalls
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val reqConfig = com.google.android.gms.ads.RequestConfiguration.Builder()
+                    .setTestDeviceIds(listOf(com.google.android.gms.ads.AdRequest.DEVICE_ID_EMULATOR))
+                    .build()
+                com.google.android.gms.ads.MobileAds.setRequestConfiguration(reqConfig)
+                com.google.android.gms.ads.MobileAds.initialize(applicationContext) {}
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "MobileAds initialization error: ${e.message}")
+            }
         }
 
         // Initialize NeliPlay notification channel

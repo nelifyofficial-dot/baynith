@@ -112,28 +112,37 @@ object NeliPlayEmbedUtils {
     }
 
     /**
-     * Prepares WebView disk cache directories and code cache structures.
-     * Prevents Chromium simple_file_enumerator POSIX ENOENT errors on fresh installs:
-     * - opendir /cache/WebView/Default/HTTP Cache/Code Cache/wasm
-     * - opendir /cache/WebView/Default/HTTP Cache/Code Cache/js
+     * Sanitizes WebView cache environment to prevent Chromium SimpleCache index reconstruction errors
+     * and ENOENT file enumerator warnings. Ensures the required code cache subdirectories exist
+     * so that Chromium's POSIX opendir can enumerate them cleanly without throwing ENOENT (2).
      */
-    fun prewarmWebViewEnvironment(context: android.content.Context) {
+    fun sanitizeWebViewEnvironment(context: android.content.Context) {
         try {
             val cache = context.cacheDir ?: return
             val webViewDir = java.io.File(cache, "WebView/Default")
             val httpCacheDir = java.io.File(webViewDir, "HTTP Cache")
-            val codeCacheDir = java.io.File(httpCacheDir, "Code Cache")
-            java.io.File(codeCacheDir, "js").mkdirs()
-            java.io.File(codeCacheDir, "wasm").mkdirs()
-            java.io.File(httpCacheDir, "index-dir").mkdirs()
+            val httpCodeCacheDir = java.io.File(httpCacheDir, "Code Cache")
+            val jsDir = java.io.File(httpCodeCacheDir, "js")
+            val wasmDir = java.io.File(httpCodeCacheDir, "wasm")
 
+            // Ensure js and wasm cache directories exist so Chromium's POSIX opendir does not fail with ENOENT (2)
+            if (!jsDir.exists()) jsDir.mkdirs()
+            if (!wasmDir.exists()) wasmDir.mkdirs()
+
+            // Also ensure default profile Code Cache directories exist
             val defaultCodeCache = java.io.File(webViewDir, "Code Cache")
-            java.io.File(defaultCodeCache, "js").mkdirs()
-            java.io.File(defaultCodeCache, "wasm").mkdirs()
-            java.io.File(webViewDir, "GPUCache").mkdirs()
+            val defaultJs = java.io.File(defaultCodeCache, "js")
+            val defaultWasm = java.io.File(defaultCodeCache, "wasm")
+            if (!defaultJs.exists()) defaultJs.mkdirs()
+            if (!defaultWasm.exists()) defaultWasm.mkdirs()
         } catch (t: Throwable) {
             // Non-fatal, suppress if filesystem restricted
         }
+    }
+
+    @Deprecated("Use sanitizeWebViewEnvironment instead")
+    fun prewarmWebViewEnvironment(context: android.content.Context) {
+        sanitizeWebViewEnvironment(context)
     }
 
     /**

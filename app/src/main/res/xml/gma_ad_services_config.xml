@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ad-services-config>
+    <!-- Disable Privacy Sandbox attribution to prevent ServiceUnavailableException when measurement service is absent -->
+    <attribution allowAllToAccess="false" />
+    <topics allowAllToAccess="false" />
+    <protected-audiences allowAllToAccess="false" />
+</ad-services-config>

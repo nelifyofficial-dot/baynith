@@ -56,6 +56,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -100,7 +102,6 @@ import coil.compose.AsyncImage
 import com.example.data.local.entities.DownloadState
 import com.example.data.model.CastMember
 import com.example.ui.components.NeliPlayAdMobBanner
-import com.example.ui.components.NeliPlayLogo
 import com.example.ui.details.formatRuntime
 import com.example.ui.theme.NeliBluePrimary
 import com.example.ui.theme.NeliCyanAccent
@@ -184,6 +185,16 @@ private fun NeliPlayExoPlayerContent(
     var showResumeDialog by remember { mutableStateOf(false) }
     var pendingResumePosition by remember { mutableLongStateOf(0L) }
     var hasHandledResumeForCurrentMedia by remember { mutableStateOf(false) }
+    var showAutoSkippedNotice by remember { mutableStateOf(false) }
+    var hasAutoSkippedMovieForCurrentMedia by remember { mutableStateOf(false) }
+
+    // Auto-dismiss the intro auto-skipped notice after 4 seconds
+    LaunchedEffect(showAutoSkippedNotice) {
+        if (showAutoSkippedNotice) {
+            delay(4000)
+            showAutoSkippedNotice = false
+        }
+    }
 
     // Cast Profile Dialog state
     var selectedCastForProfile by remember { mutableStateOf<CastMember?>(null) }
@@ -323,6 +334,17 @@ private fun NeliPlayExoPlayerContent(
                         isBuffering = false
                         playerError = null
                         playbackDuration = exoPlayer.duration.coerceAtLeast(0L)
+
+                        // If movie has autoSkip enabled and is in intro (< 5m 30s), cut and jump to 05:30
+                        if (uiState.isMovie && uiState.autoSkipIntro && !hasAutoSkippedMovieForCurrentMedia) {
+                            val cutOffset = MOVIE_AUTOSKIP_OFFSET_MS
+                            val dur = exoPlayer.duration
+                            if (exoPlayer.currentPosition < cutOffset && (dur <= 0L || dur > cutOffset)) {
+                                hasAutoSkippedMovieForCurrentMedia = true
+                                exoPlayer.seekTo(cutOffset)
+                                showAutoSkippedNotice = true
+                            }
+                        }
                     }
                     Player.STATE_ENDED -> {
                         isBuffering = false
@@ -376,6 +398,7 @@ private fun NeliPlayExoPlayerContent(
             playerError = null
             isBuffering = true
             hasHandledResumeForCurrentMedia = false
+            hasAutoSkippedMovieForCurrentMedia = false
 
             val uri = if (uiState.isOffline) {
                 Uri.fromFile(File(uiState.mediaUrl))
@@ -415,8 +438,16 @@ private fun NeliPlayExoPlayerContent(
             // Check if user has an unfinished progress (> 5 seconds)
             if (uiState.initialPositionMs > 5000L && !isLive && !hasHandledResumeForCurrentMedia) {
                 hasHandledResumeForCurrentMedia = true
-                pendingResumePosition = uiState.initialPositionMs
-                showResumeDialog = true
+                if (uiState.movieAutoCutApplied && uiState.initialPositionMs == MOVIE_AUTOSKIP_OFFSET_MS) {
+                    // Automatic start at 5m 30s for movies
+                    hasAutoSkippedMovieForCurrentMedia = true
+                    exoPlayer.seekTo(uiState.initialPositionMs)
+                    exoPlayer.play()
+                    showAutoSkippedNotice = true
+                } else {
+                    pendingResumePosition = uiState.initialPositionMs
+                    showResumeDialog = true
+                }
             } else {
                 if (uiState.initialPositionMs > 0 && !isLive) {
                     exoPlayer.seekTo(uiState.initialPositionMs)
@@ -470,34 +501,8 @@ private fun NeliPlayExoPlayerContent(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            if (!isFullscreen) {
-                // Top Bar: Back button to Movie Details + NeliPlay App Logo ONLY (no other buttons)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = onBack,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back to Details",
-                            tint = Color.White
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    NeliPlayLogo(size = 32)
-                }
-            }
-
             // --- FIXED STICKY YOUTUBE PLAYER CONTAINER ---
-            // Exactly ONE single instance! It never detaches from the view hierarchy when toggling fullscreen!
+            // Starts and covers directly from the top! Back button and controls are hosted within the player overlay.
             YouTubePlayerContainer(
                 streamUrl = uiState.mediaUrl,
                 posterUrl = displayPoster,
@@ -512,6 +517,15 @@ private fun NeliPlayExoPlayerContent(
                 isFullscreen = isFullscreen,
                 exoPlayer = exoPlayer,
                 playerView = playerView,
+                isMovie = uiState.isMovie,
+                autoSkipIntro = uiState.autoSkipIntro,
+                showAutoSkippedNotice = showAutoSkippedNotice,
+                onDismissAutoSkipNotice = { showAutoSkippedNotice = false },
+                onToggleAutoSkipIntro = { viewModel.toggleAutoSkipIntro(!uiState.autoSkipIntro) },
+                onSkipIntro = {
+                    exoPlayer.seekTo(MOVIE_AUTOSKIP_OFFSET_MS)
+                    showAutoSkippedNotice = true
+                },
                 onBack = {
                     if (isFullscreen) {
                         toggleFullscreen()
@@ -1196,8 +1210,12 @@ private fun NeliPlayExoPlayerContent(
                     TextButton(
                         onClick = {
                             showResumeDialog = false
-                            exoPlayer.seekTo(0L)
+                            val startPos = if (uiState.isMovie && uiState.autoSkipIntro) MOVIE_AUTOSKIP_OFFSET_MS else 0L
+                            exoPlayer.seekTo(startPos)
                             exoPlayer.play()
+                            if (startPos > 0L) {
+                                showAutoSkippedNotice = true
+                            }
                         }
                     ) {
                         Text("Restart", color = NeliCyanAccent)
@@ -1258,6 +1276,42 @@ private fun NeliPlayExoPlayerContent(
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
+                            }
+                        }
+
+                        // Auto-Skip for Movies
+                        if (uiState.isMovie) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text("Auto-Skip Intro", color = NeliCyanAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.toggleAutoSkipIntro(!uiState.autoSkipIntro) }
+                                    .padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Auto-skip Movie Intro",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "Start all movies at 5m 30s (cuts start intro)",
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Switch(
+                                    checked = uiState.autoSkipIntro,
+                                    onCheckedChange = { viewModel.toggleAutoSkipIntro(it) },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = NeliCyanAccent
+                                    )
+                                )
                             }
                         }
 

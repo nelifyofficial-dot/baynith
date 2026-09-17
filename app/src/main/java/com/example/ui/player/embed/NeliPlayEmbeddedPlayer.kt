@@ -318,7 +318,7 @@ fun NeliPlayEmbeddedPlayer(
                     AndroidView(
                         factory = { ctx ->
                             Log.d(TAG, "[contentId=$contentId] Creating fresh WebView instance (retryKey=$retryKey)")
-                            NeliPlayEmbedUtils.prewarmWebViewEnvironment(ctx)
+                            NeliPlayEmbedUtils.sanitizeWebViewEnvironment(ctx)
 
                             WebView(ctx).apply {
                                 layoutParams = ViewGroup.LayoutParams(
@@ -327,8 +327,12 @@ fun NeliPlayEmbeddedPlayer(
                                 )
                                 setBackgroundColor(android.graphics.Color.BLACK)
 
-                                // Prevent GPU memory exhaustion / OOM renderer crashes by using standard window rendering
-                                setLayerType(View.LAYER_TYPE_NONE, null)
+                                // Prevent GPU memory exhaustion / OOM renderer crashes; use software layer in emulator to avoid MESA rendernode ENOENT
+                                if (NeliPlayEmbedUtils.isEmulatorEnvironment()) {
+                                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                                } else {
+                                    setLayerType(View.LAYER_TYPE_NONE, null)
+                                }
 
                                 // Security & Settings Configuration
                                 settings.apply {
@@ -463,8 +467,16 @@ fun NeliPlayEmbeddedPlayer(
                                         view: WebView?,
                                         detail: RenderProcessGoneDetail?
                                     ): Boolean {
-                                        val didCrash = detail?.didCrash() ?: false
-                                        val priority = detail?.rendererPriorityAtExit() ?: -1
+                                        val didCrash = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                            detail?.didCrash() ?: false
+                                        } else {
+                                            false
+                                        }
+                                        val priority = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                            detail?.rendererPriorityAtExit() ?: -1
+                                        } else {
+                                            -1
+                                        }
                                         Log.e(TAG, "[contentId=$contentId] onRenderProcessGone (didCrash=$didCrash, priority=$priority)")
 
                                         // Promptly detach and destroy dead WebView so the OS browser terminator does not crash the app
