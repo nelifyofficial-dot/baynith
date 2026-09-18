@@ -134,8 +134,13 @@ fun NeliPlayEmbeddedPlayer(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_PAUSE -> {
-                    Log.d(TAG, "[contentId=$contentId] Lifecycle ON_PAUSE: pausing webview")
+                Lifecycle.Event.ON_PAUSE,
+                Lifecycle.Event.ON_STOP -> {
+                    Log.d(TAG, "[contentId=$contentId] Lifecycle $event: pausing webview")
+                    webViewInstance?.evaluateJavascript(
+                        "(function() { var v = document.querySelector('video'); if (v && !v.paused) v.pause(); })();",
+                        null
+                    )
                     webViewInstance?.onPause()
                     webViewInstance?.pauseTimers()
                 }

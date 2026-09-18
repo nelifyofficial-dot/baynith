@@ -90,10 +90,115 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    private val pipReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            when (intent?.action) {
+                ACTION_PIP_PLAY_PAUSE -> {
+                    playerActionCallback?.onPlayPause()
+                }
+                ACTION_PIP_REWIND -> {
+                    playerActionCallback?.onRewind(10000L)
+                }
+                ACTION_PIP_FORWARD -> {
+                    playerActionCallback?.onForward(10000L)
+                }
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = android.content.IntentFilter().apply {
+            addAction(ACTION_PIP_PLAY_PAUSE)
+            addAction(ACTION_PIP_REWIND)
+            addAction(ACTION_PIP_FORWARD)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.registerReceiver(this, pipReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        } else {
+            ContextCompat.registerReceiver(this, pipReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        try {
+            unregisterReceiver(pipReceiver)
+        } catch (e: Exception) {
+            // Ignore if not registered
+        }
+    }
+
+    fun buildPipParams(isPlaying: Boolean): android.app.PictureInPictureParams? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
+        return try {
+            val builder = android.app.PictureInPictureParams.Builder()
+                .setAspectRatio(android.util.Rational(16, 9))
+
+            // Rewind 10s Remote Action
+            val rewindIntent = Intent(ACTION_PIP_REWIND).setPackage(packageName)
+            val rewindPendingIntent = android.app.PendingIntent.getBroadcast(
+                this,
+                101,
+                rewindIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            val rewindIcon = android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_media_rew)
+            val rewindAction = android.app.RemoteAction(rewindIcon, "Rewind 10s", "Rewind 10 seconds", rewindPendingIntent)
+
+            // Play / Pause Toggle Remote Action
+            val playPauseIntent = Intent(ACTION_PIP_PLAY_PAUSE).setPackage(packageName)
+            val playPausePendingIntent = android.app.PendingIntent.getBroadcast(
+                this,
+                102,
+                playPauseIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            val playPauseIconRes = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+            val playPauseLabel = if (isPlaying) "Pause" else "Play"
+            val playPauseIcon = android.graphics.drawable.Icon.createWithResource(this, playPauseIconRes)
+            val playPauseAction = android.app.RemoteAction(playPauseIcon, playPauseLabel, playPauseLabel, playPausePendingIntent)
+
+            // Forward 10s Remote Action
+            val forwardIntent = Intent(ACTION_PIP_FORWARD).setPackage(packageName)
+            val forwardPendingIntent = android.app.PendingIntent.getBroadcast(
+                this,
+                103,
+                forwardIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            val forwardIcon = android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_media_ff)
+            val forwardAction = android.app.RemoteAction(forwardIcon, "Forward 10s", "Forward 10 seconds", forwardPendingIntent)
+
+            builder.setActions(listOf(rewindAction, playPauseAction, forwardAction))
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                builder.setAutoEnterEnabled(isPlayerActive && isPlayerPlaying)
+            }
+
+            builder.build()
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed building PiP params: ${e.message}")
+            null
+        }
+    }
+
+    fun updatePipActions(isPlaying: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            buildPipParams(isPlaying)?.let { params ->
+                try {
+                    setPictureInPictureParams(params)
+                } catch (e: Exception) {
+                    // Ignore if not in PiP
+                }
+            }
+        }
+    }
+
     fun enterPictureInPicture() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
-                val params = android.app.PictureInPictureParams.Builder()
+                val params = buildPipParams(isPlayerPlaying) ?: android.app.PictureInPictureParams.Builder()
                     .setAspectRatio(android.util.Rational(16, 9))
                     .build()
                 enterPictureInPictureMode(params)
@@ -103,8 +208,19 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    interface PlayerActionCallback {
+        fun onPlayPause()
+        fun onRewind(ms: Long = 10000L)
+        fun onForward(ms: Long = 10000L)
+    }
+
     companion object {
+        const val ACTION_PIP_PLAY_PAUSE = "com.example.PIP_PLAY_PAUSE"
+        const val ACTION_PIP_REWIND = "com.example.PIP_REWIND"
+        const val ACTION_PIP_FORWARD = "com.example.PIP_FORWARD"
+
         var isPlayerActive: Boolean = false
         var isPlayerPlaying: Boolean = false
+        var playerActionCallback: PlayerActionCallback? = null
     }
 }

@@ -127,17 +127,6 @@ fun HomeScreen(
                             tint = Color.White
                         )
                     }
-
-                    IconButton(
-                        onClick = onTvClick,
-                        modifier = Modifier.testTag("top_tv_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LiveTv,
-                            contentDescription = "Live TV",
-                            tint = Color.White
-                        )
-                    }
                 }
             }
         },

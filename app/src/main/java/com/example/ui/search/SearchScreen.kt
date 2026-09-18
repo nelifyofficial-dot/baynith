@@ -51,8 +51,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -100,6 +106,26 @@ fun SearchScreen(
 
     val typeFilters = listOf("All", "Movies", "TV Shows", "TV Channels")
 
+    // Maintain cursor/selection with TextFieldValue to prevent reversed typing / cursor jumping to 0
+    var textFieldValue by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = uiState.query,
+                selection = TextRange(uiState.query.length)
+            )
+        )
+    }
+
+    // Keep textFieldValue synced when external actions change uiState.query (clear, suggestions, recent)
+    LaunchedEffect(uiState.query) {
+        if (uiState.query != textFieldValue.text) {
+            textFieldValue = TextFieldValue(
+                text = uiState.query,
+                selection = TextRange(uiState.query.length)
+            )
+        }
+    }
+
     Scaffold(
         topBar = {
             Column(
@@ -132,8 +158,11 @@ fun SearchScreen(
                     Spacer(modifier = Modifier.width(6.dp))
 
                     OutlinedTextField(
-                        value = uiState.query,
-                        onValueChange = { viewModel.onQueryChange(it) },
+                        value = textFieldValue,
+                        onValueChange = { newValue ->
+                            textFieldValue = newValue
+                            viewModel.onQueryChange(newValue.text)
+                        },
                         placeholder = {
                             Text(
                                 text = "Search movies, TV shows, channels...",

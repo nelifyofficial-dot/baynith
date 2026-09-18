@@ -151,11 +151,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     val localFile = download?.localFilePath?.let { File(it) }
                     val isOfflinePlayable = download?.status == DownloadState.COMPLETED && localFile != null && localFile.exists()
                     val savedPosition = savedProgress?.positionMs ?: 0L
-                    // Autocut is strictly for single movies only, NEVER for series or episodes
                     val isMovieTarget = movie != null && episode == null
+                    val isSwahili = (movie?.isSwahiliNarrated == true) || (episode?.isSwahiliNarrated == true)
+
+                    // Autoskip / Autocut is strictly for single movies only (translated/DJ/Swahili narrated), NEVER for series even if narrated
+                    val isEligibleForAutoSkip = isMovieTarget && (movie?.isSwahiliNarrated == true)
+                    val effectiveAutoSkip = autoSkip && isEligibleForAutoSkip
 
                     // Automatic cut for movie starts at 5 mins and 30 secs (330,000 ms)
-                    val (movieResumePosition, movieAutoCut) = if (isMovieTarget && autoSkip) {
+                    val (movieResumePosition, movieAutoCut) = if (isEligibleForAutoSkip && autoSkip) {
                         if (savedPosition > MOVIE_AUTOSKIP_OFFSET_MS + 10_000L) {
                             Pair(savedPosition, false)
                         } else {
@@ -215,8 +219,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         allMovies.filter { it.id != contentId }.take(8)
                     }
 
-                    val isSwahili = (movie?.isSwahiliNarrated == true) || (episode?.isSwahiliNarrated == true)
-
                     val availableSeasons = seriesEpisodes.map { it.seasonNumber }.distinct().sorted()
                     val activeSeason = episode?.seasonNumber ?: availableSeasons.firstOrNull() ?: 1
                     val currentSeasonEps = seriesEpisodes.filter { it.seasonNumber == activeSeason }.sortedBy { it.episodeNumber }
@@ -229,7 +231,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             playbackType = "mp4",
                             isLive = false,
                             isOffline = true,
-                            autoSkipIntro = autoSkip,
+                            autoSkipIntro = effectiveAutoSkip,
                             movieAutoCutApplied = if (isMovieTarget) movieAutoCut else false,
                             isSwahiliNarrated = isSwahili,
                             initialPositionMs = resumePosition,
@@ -257,7 +259,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             embedCode = movie.embedCode,
                             isLive = false,
                             isOffline = false,
-                            autoSkipIntro = autoSkip,
+                            autoSkipIntro = effectiveAutoSkip,
                             movieAutoCutApplied = movieAutoCut,
                             isSwahiliNarrated = isSwahili,
                             initialPositionMs = resumePosition,
@@ -276,6 +278,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             effectiveType
                         }
 
+                        // For series/episodes, autoSkipIntro is strictly false
                         _uiState.value = PlayerUiState(
                             isLoading = false,
                             episode = episode,
@@ -286,7 +289,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             embedCode = episode.embedCode,
                             isLive = false,
                             isOffline = false,
-                            autoSkipIntro = autoSkip,
+                            autoSkipIntro = false,
                             isSwahiliNarrated = isSwahili,
                             initialPositionMs = resumePosition,
                             isFavorite = isFav,

@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 
 data class SearchUiState(
     val query: String = "",
-    val selectedFilter: String = "All", // "All", "Movies", "TV Shows", "TV Channels"
+    val selectedFilter: String = "All", // "All", "Movies", "Series", "TV Channels"
     val selectedGenre: String = "All",
     val availableGenres: List<String> = emptyList(),
     val recentSearches: List<String> = emptyList(),
@@ -63,8 +63,6 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _selectedGenre = MutableStateFlow("All")
     val selectedGenre: StateFlow<String> = _selectedGenre.asStateFlow()
-
-    private val _isSearching = MutableStateFlow(false)
 
     val popularMovies: StateFlow<List<Movie>> = movieRepository.getTrendingMovies()
         .map { it.take(8) }
@@ -122,7 +120,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), defaultGenres)
 
     private val debouncedQuery = _searchQuery
-        .debounce(50L)
+        .debounce(40L)
         .distinctUntilChanged()
 
     private val searchParamsFlow = combine(debouncedQuery, _selectedFilter, _selectedGenre) { query, filter, genre ->
@@ -137,47 +135,164 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     ) { allMovies, allChannels, allSeries, params ->
         val cleanQuery = params.query.trim().lowercase()
         val isGenreFilterActive = params.genre != "All" && params.genre.isNotBlank()
+        val queryTokens = cleanQuery.split("\\s+".toRegex()).filter { it.isNotBlank() }
 
-        // Filter Movies by title, original title, overview, or genres
-        val filteredMovies = allMovies.filter { movie ->
+        // --- SMART RELEVANCE RANKING ENGINE ---
+
+        // 1. Movie matching & scoring
+        val scoredMovies = allMovies.mapNotNull { movie ->
             val matchesGenre = !isGenreFilterActive || movie.genres.any { it.equals(params.genre, ignoreCase = true) }
-            val matchesQuery = cleanQuery.isEmpty() ||
-                    movie.title.lowercase().contains(cleanQuery) ||
-                    (movie.originalTitle?.lowercase()?.contains(cleanQuery) == true) ||
-                    movie.genres.any { it.lowercase().contains(cleanQuery) } ||
-                    movie.overview.lowercase().contains(cleanQuery)
-            matchesGenre && matchesQuery
-        }
+            if (!matchesGenre) return@mapNotNull null
 
-        // Filter Live Streams (TV Channels) by title (channel name), category/genre, or country
-        val filteredChannels = allChannels.filter { ch ->
+            if (cleanQuery.isEmpty()) {
+                return@mapNotNull Pair(movie, movie.rating.toFloat())
+            }
+
+            val titleLower = movie.title.lowercase()
+            val origLower = (movie.originalTitle ?: "").lowercase()
+            val overviewLower = movie.overview.lowercase()
+            val genresLower = movie.genres.map { it.lowercase() }
+
+            var score = 0f
+
+            // Exact match
+            if (titleLower == cleanQuery) {
+                score += 120f
+            } else if (titleLower.startsWith(cleanQuery)) {
+                score += 80f
+            } else if (titleLower.contains(cleanQuery)) {
+                score += 50f
+            }
+
+            // Token based match
+            val matchingTokens = queryTokens.count { token ->
+                titleLower.contains(token) || origLower.contains(token) ||
+                        genresLower.any { it.contains(token) } || overviewLower.contains(token)
+            }
+
+            if (matchingTokens == queryTokens.size) {
+                score += 40f
+            } else if (matchingTokens > 0) {
+                score += matchingTokens * 15f
+            }
+
+            if (genresLower.any { it.contains(cleanQuery) }) {
+                score += 25f
+            }
+
+            if (origLower.contains(cleanQuery)) {
+                score += 30f
+            }
+
+            if (overviewLower.contains(cleanQuery)) {
+                score += 10f
+            }
+
+            if (score > 0) {
+                Pair(movie, score + movie.rating.toFloat())
+            } else {
+                null
+            }
+        }.sortedByDescending { it.second }.map { it.first }
+
+        // 2. TV Channel matching & scoring
+        val scoredChannels = allChannels.mapNotNull { ch ->
             val matchesGenre = !isGenreFilterActive ||
                     (ch.category?.equals(params.genre, ignoreCase = true) == true) ||
                     ch.name.contains(params.genre, ignoreCase = true)
-            val matchesQuery = cleanQuery.isEmpty() ||
-                    ch.name.lowercase().contains(cleanQuery) ||
-                    (ch.category?.lowercase()?.contains(cleanQuery) == true) ||
-                    (ch.country?.lowercase()?.contains(cleanQuery) == true) ||
-                    (ch.description?.lowercase()?.contains(cleanQuery) == true)
-            matchesGenre && matchesQuery
-        }
+            if (!matchesGenre) return@mapNotNull null
 
-        // Filter Series by title or genres
-        val filteredSeries = allSeries.filter { s ->
-            val matchesGenre = !isGenreFilterActive || s.genres.any { it.equals(params.genre, ignoreCase = true) }
-            val matchesQuery = cleanQuery.isEmpty() ||
-                    s.name.lowercase().contains(cleanQuery) ||
-                    s.genres.any { it.lowercase().contains(cleanQuery) } ||
-                    s.overview.lowercase().contains(cleanQuery)
-            matchesGenre && matchesQuery
-        }
+            if (cleanQuery.isEmpty()) {
+                return@mapNotNull Pair(ch, 10f)
+            }
 
-        // Apply type filter: "All", "Movies", "TV Shows" (or "Series"), "TV Channels" (or "Live Streams" / "Live TV")
+            val nameLower = ch.name.lowercase()
+            val catLower = (ch.category ?: "").lowercase()
+            val countryLower = (ch.country ?: "").lowercase()
+            val descLower = (ch.description ?: "").lowercase()
+
+            var score = 0f
+
+            if (nameLower == cleanQuery) {
+                score += 100f
+            } else if (nameLower.startsWith(cleanQuery)) {
+                score += 70f
+            } else if (nameLower.contains(cleanQuery)) {
+                score += 40f
+            }
+
+            val matchingTokens = queryTokens.count { token ->
+                nameLower.contains(token) || catLower.contains(token) ||
+                        countryLower.contains(token) || descLower.contains(token)
+            }
+
+            if (matchingTokens == queryTokens.size) {
+                score += 35f
+            } else if (matchingTokens > 0) {
+                score += matchingTokens * 12f
+            }
+
+            if (catLower.contains(cleanQuery)) {
+                score += 20f
+            }
+
+            if (score > 0) {
+                Pair(ch, score)
+            } else {
+                null
+            }
+        }.sortedByDescending { it.second }.map { it.first }
+
+        // 3. Series matching & scoring
+        val scoredSeries = allSeries.mapNotNull { series ->
+            val matchesGenre = !isGenreFilterActive || series.genres.any { it.equals(params.genre, ignoreCase = true) }
+            if (!matchesGenre) return@mapNotNull null
+
+            if (cleanQuery.isEmpty()) {
+                return@mapNotNull Pair(series, series.rating.toFloat())
+            }
+
+            val nameLower = series.name.lowercase()
+            val overviewLower = series.overview.lowercase()
+            val genresLower = series.genres.map { it.lowercase() }
+
+            var score = 0f
+
+            if (nameLower == cleanQuery) {
+                score += 120f
+            } else if (nameLower.startsWith(cleanQuery)) {
+                score += 80f
+            } else if (nameLower.contains(cleanQuery)) {
+                score += 50f
+            }
+
+            val matchingTokens = queryTokens.count { token ->
+                nameLower.contains(token) || genresLower.any { it.contains(token) } || overviewLower.contains(token)
+            }
+
+            if (matchingTokens == queryTokens.size) {
+                score += 40f
+            } else if (matchingTokens > 0) {
+                score += matchingTokens * 15f
+            }
+
+            if (genresLower.any { it.contains(cleanQuery) }) {
+                score += 25f
+            }
+
+            if (score > 0) {
+                Pair(series, score + series.rating.toFloat())
+            } else {
+                null
+            }
+        }.sortedByDescending { it.second }.map { it.first }
+
+        // Filter types: "All", "Movies", "Series", "TV Channels"
         val showMovies = params.filter == "All" || params.filter == "Movies"
         val showChannels = params.filter == "All" || params.filter == "TV Channels" || params.filter == "Live Streams" || params.filter == "Live TV"
         val showSeries = params.filter == "All" || params.filter == "TV Shows" || params.filter == "Series"
 
-        // Autocomplete suggestions like YouTube as the user types
+        // Autocomplete suggestions as user types
         val suggestions = if (cleanQuery.isNotEmpty()) {
             val fromRecent = recentSearches.value.filter { it.lowercase().contains(cleanQuery) }
             val fromMovies = allMovies.filter { it.title.lowercase().contains(cleanQuery) }.map { it.title }
@@ -195,9 +310,9 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             availableGenres = availableGenresFlow.value,
             recentSearches = recentSearches.value,
             suggestions = suggestions,
-            movies = if (showMovies) filteredMovies else emptyList(),
-            channels = if (showChannels) filteredChannels else emptyList(),
-            series = if (showSeries) filteredSeries else emptyList(),
+            movies = if (showMovies) scoredMovies else emptyList(),
+            channels = if (showChannels) scoredChannels else emptyList(),
+            series = if (showSeries) scoredSeries else emptyList(),
             popularMovies = popularMovies.value,
             totalMovieCount = allMovies.size,
             totalChannelCount = allChannels.size,
@@ -229,8 +344,10 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
     fun commitSearch(query: String) {
         if (query.isNotBlank()) {
+            val trimmed = query.trim()
+            _searchQuery.value = trimmed
             viewModelScope.launch {
-                userDataRepo.addRecentSearch(query.trim())
+                userDataRepo.addRecentSearch(trimmed)
             }
         }
     }
