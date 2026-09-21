@@ -278,6 +278,25 @@ fun HomeScreen(
                             }
                         }
                     }
+
+                    // Adult Content Section (Moved from Trending to below with title Adult)
+                    if (uiState.adultMovies.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(20.dp))
+                            SectionHeader(title = "Adult")
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(uiState.adultMovies, key = { it.id }) { movie ->
+                                    MovieCard(
+                                        movie = movie,
+                                        onClick = { onMovieClick(movie.id) }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

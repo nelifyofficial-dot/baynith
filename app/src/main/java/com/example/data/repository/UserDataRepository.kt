@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.data.local.NeliPlayDatabase
 import com.example.data.local.entities.FavoriteEntity
+import com.example.data.local.entities.MyListEntity
 import com.example.data.local.entities.WatchProgressEntity
 import com.example.data.model.Movie
 import com.google.firebase.firestore.FirebaseFirestore
@@ -27,6 +28,7 @@ class UserDataRepository(context: Context) {
     private val db = NeliPlayDatabase.getDatabase(appContext)
     private val watchProgressDao = db.watchProgressDao()
     private val favoriteDao = db.favoriteDao()
+    private val myListDao = db.myListDao()
     private val firestore = FirebaseFirestore.getInstance()
 
     // Continue Watching / Watch Progress
@@ -79,6 +81,7 @@ class UserDataRepository(context: Context) {
         val exists = favoriteDao.isFavoriteSync(movie.id)
         if (exists) {
             favoriteDao.removeFavorite(movie.id)
+            myListDao.removeFromMyList(movie.id)
         } else {
             favoriteDao.addFavorite(
                 FavoriteEntity(
@@ -92,11 +95,61 @@ class UserDataRepository(context: Context) {
                     savedTimestamp = System.currentTimeMillis()
                 )
             )
+            myListDao.addToMyList(
+                MyListEntity(
+                    movieId = movie.id,
+                    title = movie.title,
+                    posterPath = movie.posterPath,
+                    backdropPath = movie.backdropPath,
+                    year = movie.year,
+                    rating = movie.rating,
+                    genres = movie.genres.joinToString(", "),
+                    isEmbed = movie.isEmbed,
+                    savedTimestamp = System.currentTimeMillis()
+                )
+            )
         }
     }
 
     suspend fun clearFavorites() {
         favoriteDao.clearAll()
+        myListDao.clearAll()
+    }
+
+    // My List (Room Database)
+    val myList: Flow<List<MyListEntity>> = myListDao.getAllMyList()
+
+    fun isInMyList(movieId: String): Flow<Boolean> = myListDao.isInMyList(movieId)
+
+    suspend fun isInMyListSync(movieId: String): Boolean = myListDao.isInMyListSync(movieId)
+
+    suspend fun toggleMyList(movie: Movie) {
+        val exists = myListDao.isInMyListSync(movie.id)
+        if (exists) {
+            myListDao.removeFromMyList(movie.id)
+        } else {
+            myListDao.addToMyList(
+                MyListEntity(
+                    movieId = movie.id,
+                    title = movie.title,
+                    posterPath = movie.posterPath,
+                    backdropPath = movie.backdropPath,
+                    year = movie.year,
+                    rating = movie.rating,
+                    genres = movie.genres.joinToString(", "),
+                    isEmbed = movie.isEmbed,
+                    savedTimestamp = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    suspend fun removeFromMyList(movieId: String) {
+        myListDao.removeFromMyList(movieId)
+    }
+
+    suspend fun clearMyList() {
+        myListDao.clearAll()
     }
 
     // Settings Keys
@@ -113,15 +166,31 @@ class UserDataRepository(context: Context) {
         val KEY_WATCH_LATER_IDS = stringSetPreferencesKey("watch_later_ids")
     }
 
-    val watchLaterIds: Flow<Set<String>> = appContext.dataStore.data.map { prefs ->
-        prefs[KEY_WATCH_LATER_IDS] ?: emptySet()
+    val watchLaterIds: Flow<Set<String>> = myListDao.getAllMyList().map { list ->
+        list.map { it.movieId }.toSet()
     }
 
-    fun isWatchLater(id: String): Flow<Boolean> = appContext.dataStore.data.map { prefs ->
-        prefs[KEY_WATCH_LATER_IDS]?.contains(id) ?: false
-    }
+    fun isWatchLater(id: String): Flow<Boolean> = myListDao.isInMyList(id)
 
-    suspend fun toggleWatchLater(id: String) {
+    suspend fun toggleWatchLater(id: String, movie: Movie? = null) {
+        val exists = myListDao.isInMyListSync(id)
+        if (exists) {
+            myListDao.removeFromMyList(id)
+        } else {
+            myListDao.addToMyList(
+                MyListEntity(
+                    movieId = id,
+                    title = movie?.title ?: "",
+                    posterPath = movie?.posterPath ?: "",
+                    backdropPath = movie?.backdropPath ?: "",
+                    year = movie?.year,
+                    rating = movie?.rating ?: 0.0,
+                    genres = movie?.genres?.joinToString(", ") ?: "",
+                    isEmbed = movie?.isEmbed ?: false,
+                    savedTimestamp = System.currentTimeMillis()
+                )
+            )
+        }
         appContext.dataStore.edit { prefs ->
             val current = prefs[KEY_WATCH_LATER_IDS] ?: emptySet()
             if (current.contains(id)) {

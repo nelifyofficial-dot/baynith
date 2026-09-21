@@ -176,26 +176,39 @@ private fun NeliPlayExoPlayerContent(
     // Media3 ExoPlayer instance with robust software/hardware decoder fallback for emulator stability
     val exoPlayer = remember {
         val codecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
-            val defaultDecoders = MediaCodecSelector.DEFAULT.getDecoderInfos(
-                mimeType,
-                requiresSecureDecoder,
-                requiresTunnelingDecoder
-            )
+            val defaultDecoders = try {
+                MediaCodecSelector.DEFAULT.getDecoderInfos(
+                    mimeType,
+                    requiresSecureDecoder,
+                    requiresTunnelingDecoder
+                )
+            } catch (e: Throwable) {
+                emptyList()
+            }
+
+            // Strictly filter out virtual hardware codecs (goldfish, ranchu) that fail component interface queries with error 6
+            val nonVirtualDecoders = defaultDecoders.filterNot { decoder ->
+                decoder.name.contains("goldfish", ignoreCase = true) ||
+                decoder.name.contains("ranchu", ignoreCase = true)
+            }
+
             val isEmu = com.example.ui.player.embed.NeliPlayEmbedUtils.isEmulatorEnvironment()
             if (isEmu) {
-                // In emulator/virtualized environments, prioritize software-only decoders (c2.android / OMX.google)
-                // and strictly demote or filter out virtual goldfish/ranchu/hardware interfaces that fail resource queries with code 6
-                defaultDecoders.sortedWith(
-                    compareByDescending<MediaCodecInfo> {
-                        it.softwareOnly || it.name.startsWith("c2.android.", ignoreCase = true) || it.name.startsWith("OMX.google.", ignoreCase = true)
-                    }.thenBy {
-                        it.name.contains("goldfish", ignoreCase = true) || it.name.contains("ranchu", ignoreCase = true)
-                    }
-                )
-            } else {
-                defaultDecoders.sortedByDescending {
-                    !it.name.contains("goldfish", ignoreCase = true) && !it.name.contains("ranchu", ignoreCase = true)
+                // In emulator/virtualized environments, strictly use standard Google software decoders
+                val softwareDecoders = nonVirtualDecoders.filter { decoder ->
+                    decoder.softwareOnly ||
+                    decoder.name.startsWith("c2.android.", ignoreCase = true) ||
+                    decoder.name.startsWith("OMX.google.", ignoreCase = true)
                 }
+                if (softwareDecoders.isNotEmpty()) {
+                    softwareDecoders
+                } else if (nonVirtualDecoders.isNotEmpty()) {
+                    nonVirtualDecoders
+                } else {
+                    defaultDecoders.filterNot { it.name.contains("goldfish", ignoreCase = true) }
+                }
+            } else {
+                if (nonVirtualDecoders.isNotEmpty()) nonVirtualDecoders else defaultDecoders
             }
         }
 

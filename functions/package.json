@@ -1,0 +1,14 @@
+{
+  "name": "neliplay-functions",
+  "description": "NeliPlay Cloud Functions for Premium Subscriptions & PalmPesa Payments",
+  "version": "1.0.0",
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.1.0",
+    "firebase-functions": "^6.3.0"
+  },
+  "private": true
+}

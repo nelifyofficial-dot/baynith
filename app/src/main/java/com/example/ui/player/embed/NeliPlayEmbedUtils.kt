@@ -2,6 +2,17 @@ package com.example.ui.player.embed
 
 object NeliPlayEmbedUtils {
 
+    fun extractEmbedUrl(rawEmbedCode: String): String? {
+        val trimmed = rawEmbedCode.trim()
+        if (trimmed.isEmpty()) return null
+        if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
+            return trimmed
+        }
+        val srcRegex = """src=["'](https?://[^"']+)["']""".toRegex(RegexOption.IGNORE_CASE)
+        val match = srcRegex.find(trimmed)
+        return match?.groupValues?.getOrNull(1)
+    }
+
     /**
      * Builds a safe, responsive HTML wrapper for embedded third-party players.
      * Preserves provider's player, controls, ads, fullscreen, and playback permissions.
@@ -79,6 +90,14 @@ object NeliPlayEmbedUtils {
                   height: 100% !important;
                   border: 0 !important;
                   outline: 0 !important;
+                  object-fit: contain !important;
+                }
+                .neliplay-embed-container > div {
+                  width: 100% !important;
+                  height: 100% !important;
+                  padding-top: 0 !important;
+                  border-radius: 0 !important;
+                  object-fit: contain !important;
                 }
               </style>
             </head>
@@ -99,16 +118,25 @@ object NeliPlayEmbedUtils {
         val model = android.os.Build.MODEL.lowercase()
         val product = android.os.Build.PRODUCT.lowercase()
         val fingerprint = android.os.Build.FINGERPRINT.lowercase()
+        val manufacturer = android.os.Build.MANUFACTURER.lowercase()
+        val brand = android.os.Build.BRAND.lowercase()
+        val device = android.os.Build.DEVICE.lowercase()
+        val board = android.os.Build.BOARD.lowercase()
         return hardware.contains("goldfish") ||
                 hardware.contains("ranchu") ||
                 hardware.contains("cutf") ||
                 hardware.contains("cuttlefish") ||
+                hardware.contains("qemu") ||
                 model.contains("google_sdk") ||
                 model.contains("emulator") ||
                 model.contains("android sdk") ||
                 product.contains("sdk") ||
                 product.contains("vbox") ||
-                fingerprint.contains("generic")
+                fingerprint.contains("generic") ||
+                brand.startsWith("generic") ||
+                device.startsWith("generic") ||
+                manufacturer.contains("genymotion") ||
+                board.contains("goldfish")
     }
 
     /**

@@ -100,6 +100,8 @@ sealed class Screen(val route: String, val title: String, val selectedIcon: Imag
     object SeriesDetails : Screen("series_details/{seriesId}", "Series Details", Icons.Filled.LiveTv, Icons.Outlined.LiveTv) {
         fun createRoute(seriesId: String) = "series_details/$seriesId"
     }
+
+    object Premium : Screen("premium", "Premium", Icons.Filled.Person, Icons.Outlined.Person)
 }
 
 val bottomNavItems = listOf(
@@ -326,7 +328,8 @@ fun NeliPlayApp(
                     onMovieClick = { id ->
                         navController.navigate(Screen.MovieDetails.createRoute(id))
                     },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onNavigateToPremium = { navController.navigate(Screen.Premium.route) }
                 )
             }
 
@@ -385,7 +388,8 @@ fun NeliPlayApp(
                     onPlayEpisode = { episodeId ->
                         navController.navigate(Screen.Player.createRoute(episodeId, isLive = false))
                     },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onNavigateToPremium = { navController.navigate(Screen.Premium.route) }
                 )
             }
 
@@ -393,7 +397,19 @@ fun NeliPlayApp(
                 AccountScreen(
                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                     onNavigateToFavorites = { navController.navigate(Screen.Library.route) },
-                    onNavigateToDownloads = { navController.navigate(Screen.Downloads.route) }
+                    onNavigateToDownloads = { navController.navigate(Screen.Downloads.route) },
+                    onNavigateToPremium = { navController.navigate(Screen.Premium.route) }
+                )
+            }
+
+            composable(Screen.Premium.route) {
+                val premiumVm: com.example.ui.premium.PremiumViewModel = viewModel()
+                com.example.ui.premium.PremiumScreen(
+                    viewModel = premiumVm,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToAccount = {
+                        navController.navigate(Screen.Account.route)
+                    }
                 )
             }
         }

@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Movies, Series, Episodes, Categories, TV Channels, Settings
+    match /movies/{movieId} {
+      allow read: if true;
+      allow write: if false; // Managed via admin console or backend
+    }
+
+    match /series/{seriesId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /episodes/{episodeId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /tvChannels/{channelId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId);
+
+      // Allow users to update their profile, but STRICTLY FORBID modifying premium or role fields
+      allow create: if isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['premiumActive', 'premiumUntil', 'premiumPlan', 'premiumUpdatedAt', 'isPremium', 'role']);
+
+      allow update: if isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['premiumActive', 'premiumUntil', 'premiumPlan', 'premiumUpdatedAt', 'isPremium', 'role']);
+
+      allow delete: if isOwner(userId);
+    }
+
+    // Payments: Users can read their own payments.
+    // Client writes are completely disabled; creation and updates are done exclusively via Cloud Functions (Admin SDK)
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && (resource.data.firebaseUid == request.auth.uid);
+      allow write: if false;
+    }
+  }
+}

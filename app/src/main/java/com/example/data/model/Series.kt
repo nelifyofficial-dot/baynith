@@ -19,11 +19,14 @@ data class Series(
     val originalLanguage: String? = null,
     val numberOfSeasons: Int = 1,
     val numberOfEpisodes: Int = 0,
+    val accessLevel: String = "FREE", // "FREE", "PREMIUM", "PURCHASED"
+    val isPremiumSeries: Boolean = false,
     val featured: Boolean = false,
     val published: Boolean = true,
     val createdAt: Any? = null,
     val updatedAt: Any? = null
 ) {
+    val isPremium: Boolean get() = accessLevel.equals("PREMIUM", ignoreCase = true) || isPremiumSeries
     companion object {
         fun fromDocument(doc: DocumentSnapshot): Series {
             val data = doc.data ?: emptyMap<String, Any>()
@@ -93,6 +96,13 @@ data class Series(
                 else -> 0
             }
 
+            val accessLevelValue = data["accessLevel"]?.toString()?.uppercase() ?: "FREE"
+            val isPremiumVal = when (val p = data["isPremium"]) {
+                is Boolean -> p
+                is String -> p.equals("true", ignoreCase = true)
+                else -> accessLevelValue == "PREMIUM"
+            }
+
             return Series(
                 id = doc.id.ifEmpty { data["id"]?.toString() ?: "" },
                 tmdbId = tmdbIdVal,
@@ -110,6 +120,8 @@ data class Series(
                 originalLanguage = data["originalLanguage"]?.toString(),
                 numberOfSeasons = seasonsCount.coerceAtLeast(1),
                 numberOfEpisodes = episodesCount,
+                accessLevel = accessLevelValue,
+                isPremiumSeries = isPremiumVal,
                 featured = featuredValue,
                 published = publishedValue,
                 createdAt = data["createdAt"],

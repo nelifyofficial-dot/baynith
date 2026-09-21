@@ -93,6 +93,7 @@ fun MovieDetailsScreen(
     onWatchClick: (String) -> Unit,
     onMovieClick: (String) -> Unit,
     onBack: () -> Unit,
+    onNavigateToPremium: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     LaunchedEffect(movieId) {
@@ -102,6 +103,7 @@ fun MovieDetailsScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showQualityDialog by remember { mutableStateOf(false) }
     var selectedQuality by remember { mutableStateOf("1080p") }
+    var showPremiumRequiredDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = NeliVoid,
@@ -210,7 +212,13 @@ fun MovieDetailsScreen(
                                 .size(64.dp)
                                 .clip(CircleShape)
                                 .background(NeliBluePrimary)
-                                .clickable { onWatchClick(targetPlayId) }
+                                .clickable {
+                                    if (movie.isPremium && !uiState.isUserPremium) {
+                                        showPremiumRequiredDialog = true
+                                    } else {
+                                        onWatchClick(targetPlayId)
+                                    }
+                                }
                                 .testTag("details_center_play_button"),
                             contentAlignment = Alignment.Center
                         ) {
@@ -324,6 +332,22 @@ fun MovieDetailsScreen(
                                 )
                             }
 
+                            if (movie.isPremium) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFFFD700).copy(alpha = 0.25f))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "PREMIUM",
+                                        color = Color(0xFFFFD700),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
                             if (movie.narrated == true) {
                                 Box(
                                     modifier = Modifier
@@ -350,7 +374,13 @@ fun MovieDetailsScreen(
                         ) {
                             // Watch Button
                             Button(
-                                onClick = { onWatchClick(targetPlayId) },
+                                onClick = {
+                                    if (movie.isPremium && !uiState.isUserPremium) {
+                                        showPremiumRequiredDialog = true
+                                    } else {
+                                        onWatchClick(targetPlayId)
+                                    }
+                                },
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = NeliBluePrimary),
                                 modifier = Modifier
@@ -630,7 +660,13 @@ fun MovieDetailsScreen(
                         items(uiState.currentSeasonEpisodes, key = { it.id }) { ep ->
                             EpisodeItemRow(
                                 episode = ep,
-                                onClick = { onWatchClick(ep.id) }
+                                onClick = {
+                                    if ((movie.isPremium || ep.isPremium) && !uiState.isUserPremium) {
+                                        showPremiumRequiredDialog = true
+                                    } else {
+                                        onWatchClick(ep.id)
+                                    }
+                                }
                             )
                         }
                     }
@@ -717,6 +753,53 @@ fun MovieDetailsScreen(
             dismissButton = {
                 TextButton(onClick = { showQualityDialog = false }) {
                     Text("Cancel", color = NeliTextSecondary)
+                }
+            }
+        )
+    }
+
+    if (showPremiumRequiredDialog) {
+        AlertDialog(
+            onDismissRequest = { showPremiumRequiredDialog = false },
+            containerColor = NeliSurface,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Maudhui ya Premium",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Text(
+                    text = "Filamu au kipindi hiki kinahitaji usajili wa NeliPlay Premium ili kuitazama.\n\nJiunge sasa kuanzia TSh 1,000 tu kwa PalmPesa ufurahie maudhui yote bila kikomo.",
+                    color = NeliTextSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPremiumRequiredDialog = false
+                        onNavigateToPremium()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700), contentColor = Color.Black)
+                ) {
+                    Text("Jiunge na Premium", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPremiumRequiredDialog = false }) {
+                    Text("Baadaye", color = NeliTextSecondary)
                 }
             }
         )

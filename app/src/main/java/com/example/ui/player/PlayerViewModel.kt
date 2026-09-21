@@ -366,7 +366,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         val newWatchLater = !current.isWatchLater
         _uiState.value = current.copy(isWatchLater = newWatchLater)
         viewModelScope.launch(Dispatchers.IO) {
-            userDataRepo.toggleWatchLater(id)
+            userDataRepo.toggleWatchLater(id, current.movie)
         }
     }
 

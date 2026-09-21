@@ -12,6 +12,9 @@ import com.example.data.repository.DownloadRepository
 import com.example.data.repository.EpisodeRepository
 import com.example.data.repository.MovieRepository
 import com.example.data.repository.UserDataRepository
+import com.example.data.repository.AuthRepository
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +28,7 @@ data class MovieDetailsUiState(
     val isLoading: Boolean = true,
     val movie: Movie? = null,
     val isFavorite: Boolean = false,
+    val isUserPremium: Boolean = false,
     val downloadEntity: DownloadEntity? = null,
     val similarMovies: List<Movie> = emptyList(),
     val seasons: List<Int> = emptyList(),
@@ -36,11 +40,20 @@ data class MovieDetailsUiState(
 )
 
 class MovieDetailsViewModel(application: Application) : AndroidViewModel(application) {
+    private val authRepo = AuthRepository()
     private val movieRepo = MovieRepository()
     private val episodeRepo = EpisodeRepository()
     private val userDataRepo = UserDataRepository(application)
     private val db = NeliPlayDatabase.getDatabase(application)
     private val downloadRepo = DownloadRepository(application, db.downloadDao())
+
+    private val userProfileFlow = authRepo.currentUserFlow.flatMapLatest { user ->
+        if (user != null) {
+            authRepo.observeUserProfile(user.uid)
+        } else {
+            flowOf(null)
+        }
+    }
 
     private val _selectedSeason = MutableStateFlow<Int?>(null)
     private val _uiState = MutableStateFlow(MovieDetailsUiState())
@@ -60,8 +73,9 @@ class MovieDetailsViewModel(application: Application) : AndroidViewModel(applica
                 },
                 userDataRepo.isFavorite(movieId),
                 downloadRepo.observeDownload(movieId),
-                movieRepo.getPublishedMovies()
-            ) { (movie, episodes, selectedSeason), isFav, download, allMovies ->
+                movieRepo.getPublishedMovies(),
+                userProfileFlow
+            ) { (movie, episodes, selectedSeason), isFav, download, allMovies, userProfile ->
                 if (movie != null) {
                     val similar = allMovies
                         .filter { it.id != movie.id && it.genres.any { g -> movie.genres.contains(g) } }
@@ -79,10 +93,13 @@ class MovieDetailsViewModel(application: Application) : AndroidViewModel(applica
                         .filter { it.seasonNumber == activeSeason }
                         .sortedBy { it.episodeNumber }
 
+                    val isPremiumUser = userProfile?.isSubscriptionActive == true || userProfile?.isAdmin == true
+
                     MovieDetailsUiState(
                         isLoading = false,
                         movie = movie,
                         isFavorite = isFav,
+                        isUserPremium = isPremiumUser,
                         downloadEntity = download,
                         similarMovies = similar,
                         seasons = seasonsList,

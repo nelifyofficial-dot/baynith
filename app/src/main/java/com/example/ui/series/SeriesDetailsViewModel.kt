@@ -11,6 +11,9 @@ import com.example.data.model.Series
 import com.example.data.repository.EpisodeRepository
 import com.example.data.repository.SeriesRepository
 import com.example.data.repository.UserDataRepository
+import com.example.data.repository.AuthRepository
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,15 +29,25 @@ data class SeriesDetailsUiState(
     val currentSeasonEpisodes: List<Episode> = emptyList(),
     val resumeEpisode: Episode? = null,
     val isFavorite: Boolean = false,
+    val isUserPremium: Boolean = false,
     val error: String? = null
 )
 
 class SeriesDetailsViewModel(application: Application) : AndroidViewModel(application) {
+    private val authRepo = AuthRepository()
     private val seriesRepo = SeriesRepository()
     private val episodeRepo = EpisodeRepository()
     private val userDataRepo = UserDataRepository(application)
     private val db = NeliPlayDatabase.getDatabase(application)
     private val watchProgressDao = db.watchProgressDao()
+
+    private val userProfileFlow = authRepo.currentUserFlow.flatMapLatest { user ->
+        if (user != null) {
+            authRepo.observeUserProfile(user.uid)
+        } else {
+            flowOf(null)
+        }
+    }
 
     private val _uiState = MutableStateFlow(SeriesDetailsUiState())
     val uiState: StateFlow<SeriesDetailsUiState> = _uiState.asStateFlow()
@@ -50,8 +63,13 @@ class SeriesDetailsViewModel(application: Application) : AndroidViewModel(applic
                 episodeRepo.getEpisodesForSeries(seriesId),
                 _selectedSeason,
                 userDataRepo.isFavorite(seriesId),
-                watchProgressDao.getAllProgress()
-            ) { series, episodes, selectedSeason, isFav, progressList ->
+                combine(watchProgressDao.getAllProgress(), userProfileFlow) { progress, profile ->
+                    Pair(progress, profile)
+                }
+            ) { series, episodes, selectedSeason, isFav, progressAndProfile ->
+                val progressList = progressAndProfile.first
+                val userProfile = progressAndProfile.second
+
                 if (series != null) {
                     val availableSeasons = episodes.map { it.seasonNumber }.distinct().sorted()
                     val seasonsList = if (availableSeasons.isNotEmpty()) availableSeasons else listOf(1)
@@ -65,6 +83,8 @@ class SeriesDetailsViewModel(application: Application) : AndroidViewModel(applic
                     val resumeCandidate = episodes.firstOrNull { it.id in watchedEpIds }
                         ?: episodes.firstOrNull()
 
+                    val isPremiumUser = userProfile?.isSubscriptionActive == true || userProfile?.isAdmin == true
+
                     SeriesDetailsUiState(
                         isLoading = false,
                         series = series,
@@ -73,7 +93,8 @@ class SeriesDetailsViewModel(application: Application) : AndroidViewModel(applic
                         allEpisodes = episodes,
                         currentSeasonEpisodes = seasonEpisodes,
                         resumeEpisode = resumeCandidate,
-                        isFavorite = isFav
+                        isFavorite = isFav,
+                        isUserPremium = isPremiumUser
                     )
                 } else {
                     SeriesDetailsUiState(

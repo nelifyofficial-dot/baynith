@@ -29,11 +29,14 @@ data class Movie(
     val audioLanguage: String? = null, // e.g. "English", "Swahili"
     val regionAvailability: String? = null, // "WORLDWIDE", "EAST_AFRICA", "SELECTED_COUNTRIES"
     val availableCountries: List<String>? = null,
+    val accessLevel: String = "FREE", // "FREE", "PREMIUM", "PURCHASED"
+    val isPremiumMovie: Boolean = false,
     val featured: Boolean = false,
     val published: Boolean = true,
     val createdAt: Any? = null,
     val updatedAt: Any? = null
 ) {
+    val isPremium: Boolean get() = accessLevel.equals("PREMIUM", ignoreCase = true) || isPremiumMovie
     /**
      * Identifies if this movie is a Swahili dubbed version.
      */
@@ -172,6 +175,13 @@ data class Movie(
                 else -> null
             }
 
+            val accessLevelValue = data["accessLevel"]?.toString()?.uppercase() ?: "FREE"
+            val isPremiumVal = when (val p = data["isPremium"]) {
+                is Boolean -> p
+                is String -> p.equals("true", ignoreCase = true)
+                else -> accessLevelValue == "PREMIUM"
+            }
+
             return Movie(
                 id = doc.id.ifEmpty { data["id"]?.toString() ?: "" },
                 tmdbId = tmdbIdValue,
@@ -199,6 +209,8 @@ data class Movie(
                 audioLanguage = data["audioLanguage"]?.toString(),
                 regionAvailability = data["regionAvailability"]?.toString(),
                 availableCountries = availableCountriesList,
+                accessLevel = accessLevelValue,
+                isPremiumMovie = isPremiumVal,
                 featured = featuredValue,
                 published = publishedValue,
                 createdAt = data["createdAt"],

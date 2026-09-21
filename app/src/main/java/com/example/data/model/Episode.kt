@@ -17,12 +17,15 @@ data class Episode(
     val embedCode: String = "",
     val runtime: Int? = null,
     val downloadEnabled: Boolean = false,
+    val accessLevel: String = "FREE",
+    val isPremiumEpisode: Boolean = false,
     val narrated: Boolean? = null,
     val narrationLanguage: String? = null,
     val published: Boolean = true,
     val createdAt: Any? = null,
     val updatedAt: Any? = null
 ) {
+    val isPremium: Boolean get() = accessLevel.equals("PREMIUM", ignoreCase = true) || isPremiumEpisode
     /**
      * Determines the effective playback type: "mp4", "m3u8", or "embed".
      * Follows backward-compatibility rules:
@@ -90,6 +93,13 @@ data class Episode(
             val sId = (data["seriesId"] ?: data["series_id"] ?: data["movieId"] ?: data["movie_id"])?.toString()
             val mId = (data["movieId"] ?: data["movie_id"] ?: data["seriesId"] ?: data["series_id"])?.toString()
 
+            val accessLevelValue = data["accessLevel"]?.toString()?.uppercase() ?: "FREE"
+            val isPremiumVal = when (val p = data["isPremium"]) {
+                is Boolean -> p
+                is String -> p.equals("true", ignoreCase = true)
+                else -> accessLevelValue == "PREMIUM"
+            }
+
             return Episode(
                 id = doc.id.ifEmpty { data["id"]?.toString() ?: "" },
                 movieId = mId,
@@ -105,6 +115,8 @@ data class Episode(
                 embedCode = data["embedCode"]?.toString() ?: "",
                 runtime = (data["runtime"] as? Number)?.toInt(),
                 downloadEnabled = downloadEnabledVal,
+                accessLevel = accessLevelValue,
+                isPremiumEpisode = isPremiumVal,
                 narrated = narratedVal,
                 narrationLanguage = data["narrationLanguage"]?.toString(),
                 published = publishedVal,

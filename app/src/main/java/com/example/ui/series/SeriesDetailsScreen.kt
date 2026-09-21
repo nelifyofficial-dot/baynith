@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
@@ -38,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,6 +71,7 @@ fun SeriesDetailsScreen(
     viewModel: SeriesDetailsViewModel,
     onPlayEpisode: (String) -> Unit,
     onBack: () -> Unit,
+    onNavigateToPremium: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -77,6 +80,7 @@ fun SeriesDetailsScreen(
     }
 
     val uiState by viewModel.uiState.collectAsState()
+    var showPremiumRequiredDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     Scaffold(
         containerColor = NeliVoid,
@@ -216,6 +220,22 @@ fun SeriesDetailsScreen(
                                     fontSize = 13.sp
                                 )
                             }
+
+                            if (series.isPremium) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFFFD700).copy(alpha = 0.25f))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "PREMIUM",
+                                        color = Color(0xFFFFD700),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
@@ -249,7 +269,13 @@ fun SeriesDetailsScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Button(
-                                onClick = { targetEp?.let { onPlayEpisode(it.id) } },
+                                onClick = {
+                                    if ((series.isPremium || targetEp?.isPremium == true) && !uiState.isUserPremium) {
+                                        showPremiumRequiredDialog = true
+                                    } else {
+                                        targetEp?.let { onPlayEpisode(it.id) }
+                                    }
+                                },
                                 enabled = targetEp != null,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = NeliCyanAccent,
@@ -363,7 +389,13 @@ fun SeriesDetailsScreen(
                     items(uiState.currentSeasonEpisodes, key = { it.id }) { episode ->
                         EpisodeItemRow(
                             episode = episode,
-                            onClick = { onPlayEpisode(episode.id) }
+                            onClick = {
+                                if ((series.isPremium || episode.isPremium) && !uiState.isUserPremium) {
+                                    showPremiumRequiredDialog = true
+                                } else {
+                                    onPlayEpisode(episode.id)
+                                }
+                            }
                         )
                     }
                 }
@@ -373,6 +405,53 @@ fun SeriesDetailsScreen(
                 }
             }
         }
+    }
+
+    if (showPremiumRequiredDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showPremiumRequiredDialog = false },
+            containerColor = NeliSurface,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Maudhui ya Premium",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Text(
+                    text = "Tamthilia hii inahitaji usajili wa NeliPlay Premium ili kuitazama.\n\nJiunge sasa kuanzia TSh 1,000 tu kwa PalmPesa ufurahie vipindi vyote bila kikomo.",
+                    color = NeliTextSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPremiumRequiredDialog = false
+                        onNavigateToPremium()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700), contentColor = Color.Black)
+                ) {
+                    Text("Jiunge na Premium", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showPremiumRequiredDialog = false }) {
+                    Text("Baadaye", color = NeliTextSecondary)
+                }
+            }
+        )
     }
 }
 

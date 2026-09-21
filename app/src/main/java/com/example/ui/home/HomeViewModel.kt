@@ -27,6 +27,7 @@ data class HomeUiState(
     val trendingMovies: List<Movie> = emptyList(),
     val trendingSeries: List<Series> = emptyList(),
     val latestMovies: List<Movie> = emptyList(),
+    val adultMovies: List<Movie> = emptyList(),
     val genreSections: Map<String, List<Movie>> = emptyMap(),
     val favoritesIds: Set<String> = emptySet(),
     val errorMessage: String? = null
@@ -75,27 +76,33 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         errorMessage = errorMsg
                     )
                 } else {
-                    val explicitFeatured = movies.filter { it.featured }
+                    val isAdultMovie: (Movie) -> Boolean = { m ->
+                        m.genres.any { it.equals("Adult", ignoreCase = true) }
+                    }
+                    val nonAdultMovies = movies.filterNot(isAdultMovie)
+                    val adultList = movies.filter(isAdultMovie).sortedByDescending { it.rating }
+
+                    val explicitFeatured = nonAdultMovies.filter { it.featured }
                     val sliderMovies = if (explicitFeatured.size >= 3) {
                         explicitFeatured.take(5)
                     } else {
-                        (explicitFeatured + movies.sortedByDescending { it.rating })
+                        (explicitFeatured + nonAdultMovies.sortedByDescending { it.rating })
                             .distinctBy { it.id }
                             .take(5)
                     }
                     val featured = sliderMovies.firstOrNull()
-                    val trending = movies.sortedByDescending { it.rating }
-                    val latest = movies.sortedByDescending { it.year ?: 0 }
+                    val trending = nonAdultMovies.sortedByDescending { it.rating }
+                    val latest = nonAdultMovies.sortedByDescending { it.year ?: 0 }
                     val sortedSeries = series.sortedByDescending { it.rating }
 
-                    // Group dynamic genres
+                    // Group dynamic genres (excluding Adult since it has its own dedicated section below)
                     val defaultGenres = listOf("Action", "Comedy", "Drama", "African", "Gospel", "Animation", "Romance", "Horror", "Family")
-                    val existingGenres = movies.flatMap { it.genres }.distinct()
+                    val existingGenres = nonAdultMovies.flatMap { it.genres }.distinct().filterNot { it.equals("Adult", ignoreCase = true) }
                     val genresToDisplay = (defaultGenres + existingGenres).distinct()
 
                     val genreMap = mutableMapOf<String, List<Movie>>()
                     for (genre in genresToDisplay) {
-                        val matching = movies.filter { m ->
+                        val matching = nonAdultMovies.filter { m ->
                             m.genres.any { it.equals(genre, ignoreCase = true) }
                         }
                         if (matching.isNotEmpty()) {
@@ -112,6 +119,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         trendingMovies = trending,
                         trendingSeries = sortedSeries,
                         latestMovies = latest,
+                        adultMovies = adultList,
                         genreSections = genreMap,
                         favoritesIds = favIds,
                         errorMessage = errorMsg

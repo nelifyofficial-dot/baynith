@@ -117,6 +117,7 @@ fun AccountScreen(
     onNavigateToFavorites: () -> Unit = {},
     onNavigateToDownloads: () -> Unit = {},
     onNavigateToHome: () -> Unit = {},
+    onNavigateToPremium: () -> Unit = {},
     viewModel: AccountViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -216,7 +217,7 @@ fun AccountScreen(
                     onNavigateToWatchlist = onNavigateToFavorites,
                     onNavigateToWatchHistory = onNavigateToFavorites,
                     onNavigateToDownloads = onNavigateToDownloads,
-                    onOpenPremium = { showPremiumInfoDialog = true },
+                    onOpenPremium = onNavigateToPremium,
                     onNavigateToSettings = onNavigateToSettings,
                     onChangeCountry = { showCountryPickerDialog = true },
                     onSignOutClick = { showSignOutDialog = true },
@@ -234,7 +235,8 @@ fun AccountScreen(
                     onQuickSignIn = { viewModel.signInAsGuest() },
                     onContinueWithoutAccount = onNavigateToHome,
                     onSelectCountry = { showCountryPickerDialog = true },
-                    onNavigateToSettings = onNavigateToSettings
+                    onNavigateToSettings = onNavigateToSettings,
+                    onNavigateToPremium = onNavigateToPremium
                 )
             }
 
@@ -412,7 +414,8 @@ private fun NotLoggedInSection(
     onQuickSignIn: () -> Unit,
     onContinueWithoutAccount: () -> Unit,
     onSelectCountry: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToPremium: () -> Unit = {}
 ) {
     var isSignUpTab by remember { mutableStateOf(false) }
     var username by remember { mutableStateOf("") }
@@ -869,6 +872,16 @@ private fun NotLoggedInSection(
             description = "Start watching on your phone and resume seamlessly on your tablet or TV."
         )
 
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // NeliPlay Premium Card for Guests / Non-Premium users
+        NeliPlayPremiumCard(
+            isPremium = false,
+            plan = null,
+            expiresDate = null,
+            onActionClick = onNavigateToPremium
+        )
+
         Spacer(modifier = Modifier.height(24.dp))
 
         // App Settings
@@ -1162,7 +1175,7 @@ private fun LoggedInSection(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "PREFERENCES & MEMBERSHIP",
+            text = "MEMBERSHIP",
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             color = NeliTextSecondary,
@@ -1170,12 +1183,23 @@ private fun LoggedInSection(
             modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
         )
 
-        AccountItemRow(
-            icon = Icons.Default.WorkspacePremium,
-            title = "Premium",
-            badgeText = if (profile?.isPremium == true) "Active" else "Free Tier",
-            onClick = onOpenPremium,
-            modifier = Modifier.testTag("account_premium_button")
+        val isUserSubscribed = profile?.isSubscriptionActive == true
+        NeliPlayPremiumCard(
+            isPremium = isUserSubscribed,
+            plan = profile?.planDisplayName ?: "Monthly",
+            expiresDate = profile?.formattedExpiryDate?.ifBlank { "Active" } ?: "Active",
+            onActionClick = onOpenPremium
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            text = "PREFERENCES",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = NeliTextSecondary,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -1385,6 +1409,162 @@ private fun AccountItemRow(
                 tint = NeliTextSecondary.copy(alpha = 0.5f),
                 modifier = Modifier.size(13.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun NeliPlayPremiumCard(
+    isPremium: Boolean,
+    plan: String?,
+    expiresDate: String?,
+    onActionClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(
+                1.dp,
+                if (isPremium) Color(0xFFFFD700).copy(alpha = 0.6f) else NeliSurfaceVariant,
+                RoundedCornerShape(16.dp)
+            ),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isPremium) Color(0xFF1B2238) else NeliSurface
+        )
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            if (isPremium) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.WorkspacePremium,
+                            contentDescription = null,
+                            tint = Color(0xFFFFD700),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "NeliPlay Premium ✓",
+                            color = Color(0xFFFFD700),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF00C853).copy(alpha = 0.2f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "Active",
+                            color = Color(0xFF00E676),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Plan:", color = NeliTextSecondary, fontSize = 12.sp)
+                        Text(
+                            text = plan ?: "Monthly",
+                            color = NeliTextPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Status:", color = NeliTextSecondary, fontSize = 12.sp)
+                        Text(
+                            text = "Active",
+                            color = Color(0xFF00E676),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Expires:", color = NeliTextSecondary, fontSize = 12.sp)
+                        Text(
+                            text = expiresDate ?: "Active",
+                            color = NeliTextPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = onActionClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFD700),
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag("manage_premium_button")
+                ) {
+                    Text("Manage Premium", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.WorkspacePremium,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(26.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "NeliPlay Premium",
+                            color = NeliTextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Furahia NeliPlay Premium.",
+                            color = NeliTextSecondary,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Button(
+                    onClick = onActionClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFD700),
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag("get_premium_button")
+                ) {
+                    Text("Get Premium", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
         }
     }
 }

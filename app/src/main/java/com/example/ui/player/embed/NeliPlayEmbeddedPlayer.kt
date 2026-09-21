@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -41,21 +42,36 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -113,7 +129,24 @@ fun NeliPlayEmbeddedPlayer(
     var retryKey by remember { mutableIntStateOf(0) }
 
     var showControls by remember { mutableStateOf(true) }
+    var isControlsLocked by remember { mutableStateOf(false) }
+    var isPlaying by remember { mutableStateOf(true) }
+    var currentPositionSeconds by remember { mutableFloatStateOf(0f) }
+    var durationSeconds by remember { mutableFloatStateOf(0f) }
+    var isSubtitlesEnabled by remember { mutableStateOf(false) }
+    var currentSpeed by remember { mutableFloatStateOf(1.0f) }
+    var currentQuality by remember { mutableStateOf("Auto") }
+    var showSpeedMenu by remember { mutableStateOf(false) }
+    var showQualityMenu by remember { mutableStateOf(false) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+
+    // Auto-hide controls overlay after 3.8s of inactivity while playing
+    LaunchedEffect(showControls, isPlaying, isControlsLocked, showSpeedMenu, showQualityMenu) {
+        if (showControls && isPlaying && !isControlsLocked && !showSpeedMenu && !showQualityMenu) {
+            kotlinx.coroutines.delay(3800)
+            showControls = false
+        }
+    }
 
     // Intercept hardware Back button: exit fullscreen first, else pop back stack
     BackHandler {
@@ -332,17 +365,14 @@ fun NeliPlayEmbeddedPlayer(
                                 )
                                 setBackgroundColor(android.graphics.Color.BLACK)
 
-                                // Prevent GPU memory exhaustion / OOM renderer crashes; use software layer in emulator to avoid MESA rendernode ENOENT
-                                if (NeliPlayEmbedUtils.isEmulatorEnvironment()) {
-                                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-                                } else {
-                                    setLayerType(View.LAYER_TYPE_NONE, null)
-                                }
+                                // Hardware composited layer for HTML5 video decoders and surfaces
+                                setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
                                 // Security & Settings Configuration
                                 settings.apply {
                                     javaScriptEnabled = true
                                     domStorageEnabled = true
+                                    databaseEnabled = true
                                     mediaPlaybackRequiresUserGesture = false
                                     allowFileAccess = false
                                     allowContentAccess = false
@@ -353,6 +383,7 @@ fun NeliPlayEmbeddedPlayer(
                                     setSupportMultipleWindows(false)
                                     javaScriptCanOpenWindowsAutomatically = false
                                     cacheMode = WebSettings.LOAD_DEFAULT
+                                    userAgentString = "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
                                 }
 
                                 // Cookie Support for legitimate third-party embeds
@@ -394,23 +425,7 @@ fun NeliPlayEmbeddedPlayer(
                                             return true
                                         }
 
-                                        // Prevent top-level navigation away from the player to third-party ad sites
-                                        if (request.isForMainFrame) {
-                                            if (url == "https://neliplay.app/" || url == "about:blank") {
-                                                return false
-                                            }
-                                            val sanitizedHost = NeliPlayEmbedUtils.extractSanitizedHost(url)
-                                            Log.d(TAG, "[contentId=$contentId] Intercepted top-level navigation to: $sanitizedHost")
-                                            // If embedCode is a direct provider URL that is loading, allow it
-                                            if (embedCode.trim().startsWith("http", ignoreCase = true) &&
-                                                url.contains(NeliPlayEmbedUtils.extractSanitizedHost(embedCode))
-                                            ) {
-                                                return false
-                                            }
-                                            // Otherwise keep player intact and suppress external ad redirect
-                                            return true
-                                        }
-
+                                        // Allow normal playback redirects and iframe navigations
                                         return false
                                     }
 
@@ -502,9 +517,15 @@ fun NeliPlayEmbeddedPlayer(
                                 }
 
                                 webViewInstance = this
-                                val safeHtml = NeliPlayEmbedUtils.buildSafeEmbedHtml(embedCode)
-                                Log.d(TAG, "[contentId=$contentId] Loading embed HTML into WebView")
-                                loadDataWithBaseURL("https://neliplay.app/", safeHtml, "text/html", "UTF-8", null)
+                                val directUrl = NeliPlayEmbedUtils.extractEmbedUrl(embedCode)
+                                if (directUrl != null && !embedCode.contains("<script", ignoreCase = true)) {
+                                    Log.d(TAG, "[contentId=$contentId] Loading direct embed URL into WebView: $directUrl")
+                                    loadUrl(directUrl)
+                                } else {
+                                    val safeHtml = NeliPlayEmbedUtils.buildSafeEmbedHtml(embedCode)
+                                    Log.d(TAG, "[contentId=$contentId] Loading embed HTML into WebView")
+                                    loadDataWithBaseURL("https://neliplay.app/", safeHtml, "text/html", "UTF-8", null)
+                                }
                             }
                         },
                         update = {
@@ -540,71 +561,422 @@ fun NeliPlayEmbeddedPlayer(
             }
         }
 
-        // Top Overlay Bar (Controls: Back, Title, Fullscreen Toggle) - "Embedded Player" label REMOVED
+        // Periodic position updater from HTML5 video element
+        LaunchedEffect(Unit) {
+            while (true) {
+                kotlinx.coroutines.delay(1000)
+                webViewInstance?.evaluateJavascript(
+                    """
+                    (function() {
+                        var v = document.querySelector('video');
+                        if (v) {
+                            return JSON.stringify({
+                                currentTime: v.currentTime || 0,
+                                duration: v.duration || 0,
+                                paused: v.paused,
+                                playbackRate: v.playbackRate || 1.0
+                            });
+                        }
+                        return null;
+                    })();
+                    """.trimIndent()
+                ) { result ->
+                    if (result != null && result != "null" && result != "\"null\"") {
+                        try {
+                            val cleanJson = if (result.startsWith("\"") && result.endsWith("\"")) {
+                                result.substring(1, result.length - 1).replace("\\\"", "\"")
+                            } else {
+                                result
+                            }
+                            val obj = org.json.JSONObject(cleanJson)
+                            currentPositionSeconds = obj.optDouble("currentTime", 0.0).toFloat()
+                            val dur = obj.optDouble("duration", 0.0).toFloat()
+                            if (dur > 0) durationSeconds = dur
+                            isPlaying = !obj.optBoolean("paused", false)
+                        } catch (e: Throwable) {
+                            // Ignore json parse error
+                        }
+                    }
+                }
+            }
+        }
+
+        // Helper functions for playback control via JavaScript injection
+        val togglePlayPause = {
+            webViewInstance?.evaluateJavascript(
+                """
+                (function() {
+                    var v = document.querySelector('video');
+                    if (v) {
+                        if (v.paused) {
+                            v.play();
+                            return 'playing';
+                        } else {
+                            v.pause();
+                            return 'paused';
+                        }
+                    }
+                    return 'none';
+                })();
+                """.trimIndent()
+            ) { res ->
+                if (res?.contains("playing") == true) {
+                    isPlaying = true
+                } else if (res?.contains("paused") == true) {
+                    isPlaying = false
+                } else {
+                    isPlaying = !isPlaying
+                }
+            }
+        }
+
+        val seekRelative = { offsetSeconds: Float ->
+            val target = (currentPositionSeconds + offsetSeconds).coerceAtLeast(0f)
+            currentPositionSeconds = target
+            webViewInstance?.evaluateJavascript(
+                """
+                (function() {
+                    var v = document.querySelector('video');
+                    if (v) {
+                        v.currentTime = Math.max(0, Math.min(v.duration || 999999, (v.currentTime || 0) + ($offsetSeconds)));
+                        return v.currentTime;
+                    }
+                    return 0;
+                })();
+                """.trimIndent(),
+                null
+            )
+        }
+
+        val seekTo = { targetSeconds: Float ->
+            currentPositionSeconds = targetSeconds
+            webViewInstance?.evaluateJavascript(
+                """
+                (function() {
+                    var v = document.querySelector('video');
+                    if (v) {
+                        v.currentTime = $targetSeconds;
+                    }
+                })();
+                """.trimIndent(),
+                null
+            )
+        }
+
+        val setSpeed = { speed: Float ->
+            currentSpeed = speed
+            webViewInstance?.evaluateJavascript(
+                """
+                (function() {
+                    var v = document.querySelector('video');
+                    if (v) {
+                        v.playbackRate = $speed;
+                    }
+                })();
+                """.trimIndent(),
+                null
+            )
+        }
+
+        val toggleSubtitles = {
+            isSubtitlesEnabled = !isSubtitlesEnabled
+            webViewInstance?.evaluateJavascript(
+                """
+                (function() {
+                    var v = document.querySelector('video');
+                    if (v && v.textTracks) {
+                        for (var i = 0; i < v.textTracks.length; i++) {
+                            v.textTracks[i].mode = '$isSubtitlesEnabled' === 'true' ? 'showing' : 'hidden';
+                        }
+                    }
+                })();
+                """.trimIndent(),
+                null
+            )
+        }
+
+        val formatTime = { seconds: Float ->
+            val totalSeconds = seconds.toInt().coerceAtLeast(0)
+            val hours = totalSeconds / 3600
+            val minutes = (totalSeconds % 3600) / 60
+            val secs = totalSeconds % 60
+            if (hours > 0) {
+                String.format("%d:%02d:%02d", hours, minutes, secs)
+            } else {
+                String.format("%02d:%02d", minutes, secs)
+            }
+        }
+
+        // Lock Screen Button (visible when locked or when controls are toggled)
         AnimatedVisibility(
-            visible = showControls,
+            visible = showControls || isControlsLocked,
             enter = fadeIn(),
             exit = fadeOut(),
-            modifier = Modifier.align(Alignment.TopCenter)
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(top = 12.dp, end = 16.dp)
         ) {
-            Box(
+            IconButton(
+                onClick = { isControlsLocked = !isControlsLocked },
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.65f))
-                    .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(24.dp))
+                    .testTag("embed_lock_toggle")
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Icon(
+                    imageVector = if (isControlsLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                    contentDescription = if (isControlsLocked) "Unlock Controls" else "Lock Controls",
+                    tint = if (isControlsLocked) NeliCyanAccent else Color.White
+                )
+            }
+        }
+
+        // Cinematic Dark Controls Overlay
+        AnimatedVisibility(
+            visible = showControls && !isControlsLocked,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Top Overlay Bar (Controls: Back, Title, CC, Speed, Quality, Fullscreen)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter)
+                        .background(Color.Black.copy(alpha = 0.70f))
+                        .statusBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        IconButton(
-                            onClick = onBack,
-                            modifier = Modifier.testTag("embed_back_button")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.White
+                            IconButton(
+                                onClick = onBack,
+                                modifier = Modifier.testTag("embed_back_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = Color.White
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            Text(
+                                text = title,
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(6.dp))
+                        // Top Action Icons: CC, Speed, Quality, Fullscreen
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Subtitles (CC) Toggle
+                            IconButton(
+                                onClick = { toggleSubtitles() },
+                                modifier = Modifier.testTag("embed_cc_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ClosedCaption,
+                                    contentDescription = "Closed Captions",
+                                    tint = if (isSubtitlesEnabled) NeliCyanAccent else Color.White.copy(alpha = 0.8f)
+                                )
+                            }
 
-                        // Movie / Episode Title (without "Embedded Player" label)
-                        Text(
-                            text = title,
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            // Speed Selector
+                            Box {
+                                IconButton(
+                                    onClick = { showSpeedMenu = true },
+                                    modifier = Modifier.testTag("embed_speed_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Speed,
+                                        contentDescription = "Playback Speed",
+                                        tint = Color.White.copy(alpha = 0.8f)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showSpeedMenu,
+                                    onDismissRequest = { showSpeedMenu = false }
+                                ) {
+                                    listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { spd ->
+                                        DropdownMenuItem(
+                                            text = { Text("${spd}x" + if (currentSpeed == spd) " ✓" else "") },
+                                            onClick = {
+                                                setSpeed(spd)
+                                                showSpeedMenu = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Quality Selector
+                            Box {
+                                IconButton(
+                                    onClick = { showQualityMenu = true },
+                                    modifier = Modifier.testTag("embed_quality_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.HighQuality,
+                                        contentDescription = "Video Quality",
+                                        tint = Color.White.copy(alpha = 0.8f)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showQualityMenu,
+                                    onDismissRequest = { showQualityMenu = false }
+                                ) {
+                                    listOf("Auto", "1080p", "720p", "480p", "360p").forEach { q ->
+                                        DropdownMenuItem(
+                                            text = { Text(q + if (currentQuality == q) " ✓" else "") },
+                                            onClick = {
+                                                currentQuality = q
+                                                showQualityMenu = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Fullscreen toggle
+                            IconButton(
+                                onClick = {
+                                    if (isManualFullscreen) {
+                                        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                        isManualFullscreen = false
+                                    } else {
+                                        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                                        isManualFullscreen = true
+                                    }
+                                },
+                                modifier = Modifier.testTag("embed_fullscreen_toggle")
+                            ) {
+                                Icon(
+                                    imageVector = if (isManualFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                    contentDescription = "Toggle Fullscreen",
+                                    tint = Color.White
+                                )
+                            }
+
+                            // Spacer for the top-right Lock button
+                            Spacer(modifier = Modifier.width(42.dp))
+                        }
+                    }
+                }
+
+                // Center Playback Controls: Replay 10s, Play/Pause, Forward 10s
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(28.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 10s Back
+                    IconButton(
+                        onClick = { seekRelative(-10f) },
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(26.dp))
+                            .testTag("embed_rewind_10s")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Replay10,
+                            contentDescription = "Rewind 10 seconds",
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
                         )
                     }
 
-                    // Manual Fullscreen toggle
+                    // Play / Pause
                     IconButton(
-                        onClick = {
-                            if (isManualFullscreen) {
-                                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                                isManualFullscreen = false
-                            } else {
-                                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                                isManualFullscreen = true
-                            }
-                        },
-                        modifier = Modifier.testTag("embed_fullscreen_toggle")
+                        onClick = { togglePlayPause() },
+                        modifier = Modifier
+                            .size(68.dp)
+                            .background(NeliBluePrimary.copy(alpha = 0.85f), RoundedCornerShape(34.dp))
+                            .testTag("embed_play_pause")
                     ) {
                         Icon(
-                            imageVector = if (isManualFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                            contentDescription = "Toggle Fullscreen",
-                            tint = Color.White
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp)
                         )
+                    }
+
+                    // 10s Forward
+                    IconButton(
+                        onClick = { seekRelative(10f) },
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(26.dp))
+                            .testTag("embed_forward_10s")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Forward10,
+                            contentDescription = "Forward 10 seconds",
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+
+                // Bottom Overlay Bar (Progress Bar with Current Time & Duration)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .background(Color.Black.copy(alpha = 0.70f))
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Slider(
+                            value = if (durationSeconds > 0f) currentPositionSeconds.coerceIn(0f, durationSeconds) else 0f,
+                            onValueChange = { newPos ->
+                                seekTo(newPos)
+                            },
+                            valueRange = 0f..(if (durationSeconds > 0f) durationSeconds else 100f),
+                            colors = SliderDefaults.colors(
+                                thumbColor = NeliCyanAccent,
+                                activeTrackColor = NeliCyanAccent,
+                                inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(28.dp)
+                                .testTag("embed_playback_slider")
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = formatTime(currentPositionSeconds),
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+
+                            Text(
+                                text = if (durationSeconds > 0f) formatTime(durationSeconds) else "--:--",
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
