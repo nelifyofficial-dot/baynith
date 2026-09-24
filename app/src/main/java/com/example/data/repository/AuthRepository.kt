@@ -4,11 +4,19 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.util.Log
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
 import com.example.data.firebase.FirebaseManager
 import com.example.data.model.UserProfile
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
@@ -205,6 +213,70 @@ class AuthRepository {
             Log.e(TAG, "Anonymous sign-in error: ${e.message}", e)
             Result.failure(e)
         }
+    }
+
+    private fun findActivity(context: Context): Activity? {
+        var ctx = context
+        while (ctx is ContextWrapper) {
+            if (ctx is Activity) return ctx
+            ctx = ctx.baseContext
+        }
+        return null
+    }
+
+    /**
+     * Signs in with Google using Credential Manager.
+     * Searches and reads Google accounts directly from the Android device (like YouTube / Google apps).
+     * With autoSelectEnabled = true, if a Google account is already on the mobile device, it can auto-login seamlessly.
+     */
+    suspend fun signInWithGoogle(context: Context, autoSelectOnly: Boolean = false): Result<FirebaseUser> {
+        return try {
+            val activity = findActivity(context) ?: return Result.failure(Exception("Activity context required for Google sign-in."))
+            val credentialManager = CredentialManager.create(activity)
+
+            val googleIdOption = GetGoogleIdOption.Builder()
+                .setFilterByAuthorizedAccounts(autoSelectOnly)
+                .setServerClientId(GOOGLE_WEB_CLIENT_ID)
+                .setAutoSelectEnabled(true)
+                .build()
+
+            val request = GetCredentialRequest.Builder()
+                .addCredentialOption(googleIdOption)
+                .build()
+
+            val response = credentialManager.getCredential(request = request, context = activity)
+            val credential = response.credential
+
+            if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data)
+                val idToken = googleIdToken.idToken
+                val authCredential = GoogleAuthProvider.getCredential(idToken, null)
+                val authResult = auth.signInWithCredential(authCredential).await()
+                val user = authResult.user ?: throw Exception("Google sign in did not return an authenticated user.")
+                syncUserProfile(user)
+                Log.i(TAG, "Google sign-in succeeded for: ${user.email}")
+                Result.success(user)
+            } else {
+                Result.failure(Exception("Aina ya akaunti ya Google haikutambuliwa."))
+            }
+        } catch (e: GetCredentialCancellationException) {
+            Result.failure(Exception("Umechagua kutokuingia na Google."))
+        } catch (e: Exception) {
+            Log.w(TAG, "Google sign-in exception: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Attempts automatic Google sign-in silently without requiring manual password entry,
+     * mirroring how YouTube automatically signs in with the primary device Google account.
+     */
+    suspend fun attemptAutoGoogleLogin(context: Context): Result<FirebaseUser> {
+        val current = auth.currentUser
+        if (current != null) {
+            return Result.success(current)
+        }
+        return signInWithGoogle(context, autoSelectOnly = true)
     }
 
     /**

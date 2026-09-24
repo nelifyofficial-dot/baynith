@@ -7,6 +7,7 @@ import com.example.data.local.entities.PaymentOrderEntity
 import com.example.data.payment.harakapay.HarakaPayClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
@@ -14,6 +15,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.CancellationException
 
 /**
  * Repository responsible for managing payment orders, persistence,
@@ -73,7 +75,7 @@ class PaymentOrderRepository private constructor(context: Context) {
         amountTzs: Long,
         phoneNumber: String,
         movieId: String? = null
-    ): PaymentOrderEntity = withContext(Dispatchers.IO) {
+    ): PaymentOrderEntity = withContext(Dispatchers.IO + NonCancellable) {
         val entity = PaymentOrderEntity(
             orderId = orderId.trim(),
             packageId = packageId,
@@ -126,7 +128,7 @@ class PaymentOrderRepository private constructor(context: Context) {
             return@withContext Result.failure(IllegalArgumentException("Tafadhali weka Order ID halali."))
         }
 
-        // 1. Check if already confirmed
+        // 1. Check if already confirmed (Single-use rule)
         val alreadyConfirmed = dao.isOrderAlreadyConfirmed(cleanOrderId)
         if (alreadyConfirmed) {
             return@withContext Result.failure(
@@ -135,67 +137,89 @@ class PaymentOrderRepository private constructor(context: Context) {
         }
 
         // 2. Fetch order from local database
-        var localOrder = dao.getOrderByOrderId(cleanOrderId)
+        val localOrder = dao.getOrderByOrderId(cleanOrderId)
 
-        // 3. Verify status with HarakaPay Gateway
-        val statusResult = HarakaPayClient.checkStatus(cleanOrderId)
-        var isPaymentVerified = overrideSuccess
-
-        statusResult.fold(
-            onSuccess = { resp ->
-                if (resp.isCompleted) {
-                    isPaymentVerified = true
-                } else if (resp.isPending && !overrideSuccess) {
-                    // Gateway says still pending
-                    Log.d(TAG, "Gateway status is still pending for order: $cleanOrderId")
+        // 3. Strictly verify status with HarakaPay Gateway (GET https://harakapay.net/api/v1/status/{order_id})
+        var statusResp: com.example.data.payment.harakapay.HarakaPayStatusResponse? = null
+        try {
+            val statusResult = HarakaPayClient.checkStatus(cleanOrderId)
+            statusResult.fold(
+                onSuccess = { resp ->
+                    statusResp = resp
+                },
+                onFailure = { err ->
+                    Log.w(TAG, "Gateway status check error for $cleanOrderId: ${err.message}")
+                    return@withContext Result.failure(
+                        Exception("Imeshindwa kuwasiliana na HarakaPay kuthibitisha malipo. Tafadhali angalia mtandao wako au hakikisha Order ID ni sahihi.")
+                    )
                 }
-            },
-            onFailure = { err ->
-                Log.w(TAG, "Gateway status check error: ${err.message}")
-            }
-        )
-
-        // If manual "Nishalipa" was clicked or gateway verified:
-        if (isPaymentVerified || overrideSuccess) {
-            val now = System.currentTimeMillis()
-            val packageId = localOrder?.packageId ?: "monthly"
-            val packageName = localOrder?.packageName ?: "Premium Mwezi"
-            val amount = localOrder?.amountTzs ?: 10000L
-            val movieId = localOrder?.movieId
-
-            // Update or create order entity with confirmed status
-            val confirmedOrder = (localOrder ?: PaymentOrderEntity(
-                orderId = cleanOrderId,
-                packageId = packageId,
-                packageName = packageName,
-                amountTzs = amount,
-                phoneNumber = "",
-                createdAt = now,
-                status = "COMPLETED",
-                isConfirmed = true,
-                confirmedAt = now,
-                movieId = movieId
-            )).copy(
-                status = "COMPLETED",
-                isConfirmed = true,
-                confirmedAt = now
             )
-
-            dao.insertOrder(confirmedOrder)
-
-            // Activate subscription in SubscriptionManager
-            SubscriptionManager.activatePlan(
-                planId = packageId,
-                orderId = cleanOrderId,
-                targetMovieId = movieId
-            )
-
-            Log.i(TAG, "Successfully confirmed and activated order: $cleanOrderId for $packageName")
-            Result.success(confirmedOrder)
-        } else {
-            Result.failure(
-                Exception("Malipo ya Order ID $cleanOrderId bado hayajathibitishwa na mtandao. Tafadhali hakikisha umeweka PIN kwenye simu yako kisha jaribu tena.")
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (e: Exception) {
+            Log.e(TAG, "Gateway check exception: ${e.message}")
+            return@withContext Result.failure(
+                Exception("Hitilafu ya mawasiliano na HarakaPay: ${e.message ?: "Tafadhali jaribu tena."}")
             )
         }
+
+        val currentStatus = statusResp
+        if (currentStatus == null) {
+            return@withContext Result.failure(
+                Exception("HarakaPay haikutoa taarifa ya Order ID hii. Tafadhali hakikisha umeingiza Order ID sahihi.")
+            )
+        }
+
+        // 4. Strict status checking - If not completed, REJECT ("ikatae")!
+        if (!currentStatus.isCompleted) {
+            val reasonMessage = when {
+                currentStatus.isPending ->
+                    "Malipo ya Order ID $cleanOrderId bado hayajakamilika kwenye mtandao (Hali: BADO INASUBIRI / PENDING).\n\nTafadhali weka namba ya siri (PIN) kwenye simu yako kuthibitisha malipo, kisha bonyeza tena Nishalipa."
+                currentStatus.isFailed ->
+                    "Malipo yamekataliwa au yameshindikana na mtandao (Hali: FAILED / CANCELLED). Tafadhali jaribu tena kufanya malipo mapya."
+                else ->
+                    "Malipo hayajathibitishwa na HarakaPay (Hali: ${currentStatus.status.ifBlank { "Pending" }}). Tafadhali kamilisha malipo kwenye simu yako kwanza."
+            }
+            Log.w(TAG, "Order confirmation rejected for $cleanOrderId: status=${currentStatus.status}")
+            return@withContext Result.failure(Exception(reasonMessage))
+        }
+
+        // 5. Payment is strictly completed! Activate package and mark confirmed
+        val now = System.currentTimeMillis()
+        val packageId = localOrder?.packageId ?: "monthly"
+        val packageName = localOrder?.packageName ?: "Premium Mwezi"
+        val amount = if (currentStatus.amount > 0) currentStatus.amount else (localOrder?.amountTzs ?: 10000L)
+        val movieId = localOrder?.movieId
+
+        // Update or create order entity with confirmed status
+        val confirmedOrder = (localOrder ?: PaymentOrderEntity(
+            orderId = cleanOrderId,
+            packageId = packageId,
+            packageName = packageName,
+            amountTzs = amount,
+            phoneNumber = "",
+            createdAt = now,
+            status = "COMPLETED",
+            isConfirmed = true,
+            confirmedAt = now,
+            movieId = movieId
+        )).copy(
+            status = "COMPLETED",
+            isConfirmed = true,
+            confirmedAt = now,
+            amountTzs = amount
+        )
+
+        dao.insertOrder(confirmedOrder)
+
+        // Activate subscription in SubscriptionManager
+        SubscriptionManager.activatePlan(
+            planId = packageId,
+            orderId = cleanOrderId,
+            targetMovieId = movieId
+        )
+
+        Log.i(TAG, "Payment VERIFIED with HarakaPay gateway and order confirmed: $cleanOrderId for $packageName")
+        Result.success(confirmedOrder)
     }
 }

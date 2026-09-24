@@ -12,6 +12,7 @@ import com.example.data.repository.EpisodeRepository
 import com.example.data.repository.SeriesRepository
 import com.example.data.repository.UserDataRepository
 import com.example.data.repository.AuthRepository
+import com.example.data.repository.DownloadRepository
 import com.example.data.model.UserProfile
 import com.example.data.repository.LimitCheckResult
 import com.example.data.repository.SubscriptionLimitManager
@@ -45,6 +46,7 @@ class SeriesDetailsViewModel(application: Application) : AndroidViewModel(applic
     private val db = NeliPlayDatabase.getDatabase(application)
     private val watchProgressDao = db.watchProgressDao()
     private val limitManager = SubscriptionLimitManager.getInstance(application)
+    private val downloadRepo = DownloadRepository(application, db.downloadDao())
 
     private val userProfileFlow = authRepo.currentUserFlow.flatMapLatest { user ->
         if (user != null) {
@@ -143,5 +145,31 @@ class SeriesDetailsViewModel(application: Application) : AndroidViewModel(applic
             )
             userDataRepo.toggleFavorite(fakeMovie)
         }
+    }
+
+    /**
+     * Queues all episodes of the series for download into a single dedicated folder.
+     * Returns count of queued episodes.
+     */
+    fun downloadFullSeries(): Int {
+        val series = _uiState.value.series ?: return 0
+        val episodes = _uiState.value.allEpisodes
+        return downloadRepo.downloadFullSeries(
+            seriesName = series.name,
+            episodes = episodes,
+            seriesPosterPath = series.posterPath
+        )
+    }
+
+    /**
+     * Downloads an individual episode into the series' dedicated folder.
+     */
+    fun downloadEpisode(episode: Episode) {
+        val series = _uiState.value.series ?: return
+        downloadRepo.startEpisodeDownload(
+            seriesName = series.name,
+            episode = episode,
+            seriesPosterPath = series.posterPath
+        )
     }
 }

@@ -10,6 +10,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import org.json.JSONObject
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import java.util.concurrent.CancellationException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -130,6 +131,8 @@ class HarakaPayService(
                 val errorMsg = parseErrorMessage(errorBody) ?: "Hitilafu katika mfumo wa malipo wa HarakaPay (${response.code()})."
                 Result.failure(Exception(errorMsg))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Error in collectPayment: ${e.message}", e)
             Result.failure(e)
@@ -172,6 +175,8 @@ class HarakaPayService(
                 val errorMsg = parseErrorMessage(errorBody) ?: "Hitilafu wakati wa kukagua hali ya malipo (${response.code()})."
                 Result.failure(Exception(errorMsg))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Error in checkStatus: ${e.message}", e)
             Result.failure(e)
@@ -194,6 +199,8 @@ class HarakaPayService(
                 val errorMsg = parseErrorMessage(errorBody) ?: "Hitilafu wakati wa kuangalia salio (${response.code()})."
                 Result.failure(Exception(errorMsg))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Error in getBalance: ${e.message}", e)
             Result.failure(e)

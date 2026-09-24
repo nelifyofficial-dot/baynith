@@ -9,6 +9,7 @@ import android.util.Log
 import com.example.data.local.dao.DownloadDao
 import com.example.data.local.entities.DownloadEntity
 import com.example.data.local.entities.DownloadState
+import com.example.data.model.Episode
 import com.example.data.model.Movie
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -95,12 +96,84 @@ class DownloadRepository(
         activeJobs[movie.id] = job
     }
 
-    private suspend fun downloadMovieInternal(movie: Movie) = withContext(Dispatchers.IO) {
-        val moviesDir = getDownloadsDirectory()
-        if (!moviesDir.exists()) moviesDir.mkdirs()
+    /**
+     * Downloads an individual episode of a series into a dedicated series folder
+     * (e.g. downloads/series_squidgame/squidgame_S1E1.mp4).
+     */
+    fun startEpisodeDownload(
+        seriesName: String,
+        episode: Episode,
+        seriesPosterPath: String = "",
+        wifiOnly: Boolean = false
+    ) {
+        if (episode.streamUrl.isBlank()) {
+            Log.w(TAG, "Download rejected: streamUrl is empty for episode ${episode.title}")
+            return
+        }
 
-        val safeFileName = "movie_${movie.id.replace(Regex("[^a-zA-Z0-9_-]"), "_")}.mp4"
-        val destinationFile = File(moviesDir, safeFileName)
+        val sanitizedSeriesName = seriesName.trim().replace(Regex("[^a-zA-Z0-9_-]"), "_").lowercase()
+        val seriesDir = File(getDownloadsDirectory(), "series_$sanitizedSeriesName")
+        if (!seriesDir.exists()) seriesDir.mkdirs()
+
+        val safeEpisodeFileName = "${sanitizedSeriesName}_S${episode.seasonNumber}E${episode.episodeNumber}_${episode.id.take(8)}.mp4"
+        val destinationFile = File(seriesDir, safeEpisodeFileName)
+
+        val episodeMovie = Movie(
+            id = "ep_${episode.id}",
+            title = "$seriesName - S${episode.seasonNumber}E${episode.episodeNumber}: ${episode.title.ifBlank { "Episode ${episode.episodeNumber}" }}",
+            overview = episode.overview,
+            posterPath = episode.stillPath.ifBlank { seriesPosterPath },
+            streamUrl = episode.streamUrl,
+            downloadEnabled = true
+        )
+
+        // Cancel existing job if running
+        activeJobs[episodeMovie.id]?.cancel()
+
+        val job = scope.launch {
+            downloadMovieInternal(episodeMovie, destinationFile)
+        }
+        activeJobs[episodeMovie.id] = job
+    }
+
+    /**
+     * Downloads ALL episodes of a series into the series' dedicated single directory in one batch,
+     * as requested by user ("allow full series download na zijidownload kwenye file moja mfano series name squidgame").
+     */
+    fun downloadFullSeries(
+        seriesName: String,
+        episodes: List<Episode>,
+        seriesPosterPath: String = "",
+        wifiOnly: Boolean = false
+    ): Int {
+        var queued = 0
+        for (episode in episodes) {
+            if (episode.streamUrl.isNotBlank()) {
+                startEpisodeDownload(
+                    seriesName = seriesName,
+                    episode = episode,
+                    seriesPosterPath = seriesPosterPath,
+                    wifiOnly = wifiOnly
+                )
+                queued++
+            }
+        }
+        return queued
+    }
+
+    private suspend fun downloadMovieInternal(
+        movie: Movie,
+        customDestinationFile: File? = null
+    ) = withContext(Dispatchers.IO) {
+        val destinationFile = if (customDestinationFile != null) {
+            customDestinationFile.parentFile?.let { if (!it.exists()) it.mkdirs() }
+            customDestinationFile
+        } else {
+            val moviesDir = getDownloadsDirectory()
+            if (!moviesDir.exists()) moviesDir.mkdirs()
+            val safeFileName = "movie_${movie.id.replace(Regex("[^a-zA-Z0-9_-]"), "_")}.mp4"
+            File(moviesDir, safeFileName)
+        }
 
         val existingDownloaded = destinationFile.length()
 

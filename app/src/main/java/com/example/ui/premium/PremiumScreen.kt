@@ -384,7 +384,7 @@ fun PremiumScreen(
                                         },
                                         onConfirm = {
                                             scope.launch {
-                                                repo.confirmPaymentOrder(order.orderId, overrideSuccess = true)
+                                                repo.confirmPaymentOrder(order.orderId)
                                             }
                                         }
                                     )

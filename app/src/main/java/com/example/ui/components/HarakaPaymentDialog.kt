@@ -95,6 +95,7 @@ import com.example.ui.theme.NeliSurface
 import com.example.ui.theme.NeliSurfaceVariant
 import com.example.ui.theme.NeliTextSecondary
 import com.example.ui.theme.NeliVoid
+import java.util.concurrent.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -197,15 +198,21 @@ fun HarakaPaymentDialog(
 
                 // Every 3 seconds, poll the gateway status automatically
                 if (secondsRemaining % 3 == 0) {
-                    val statusRes = HarakaPayClient.checkStatus(activeOrderId)
-                    statusRes.onSuccess { statusResp ->
-                        if (statusResp.isCompleted) {
-                            // Automatically confirmed!
-                            repo.confirmPaymentOrder(activeOrderId, overrideSuccess = true)
-                            step = PaymentStep.SUCCESS
-                            onPaymentSuccess()
-                            return@LaunchedEffect
+                    try {
+                        val statusRes = HarakaPayClient.checkStatus(activeOrderId)
+                        statusRes.onSuccess { statusResp ->
+                            if (statusResp.isCompleted) {
+                                // Automatically confirmed!
+                                repo.confirmPaymentOrder(activeOrderId)
+                                step = PaymentStep.SUCCESS
+                                onPaymentSuccess()
+                                return@LaunchedEffect
+                            }
                         }
+                    } catch (ce: CancellationException) {
+                        throw ce
+                    } catch (e: Exception) {
+                        // Polling check temporary glitch, will retry in next interval
                     }
                 }
             }
@@ -737,8 +744,8 @@ fun HarakaPaymentDialog(
                                         onClick = {
                                             isCheckingStatus = true
                                             scope.launch {
-                                                // Confirm and activate order
-                                                val result = repo.confirmPaymentOrder(activeOrderId, overrideSuccess = true)
+                                                // Confirm and activate order with strict HarakaPay verification
+                                                val result = repo.confirmPaymentOrder(activeOrderId)
                                                 isCheckingStatus = false
                                                 result.fold(
                                                     onSuccess = {
@@ -750,7 +757,7 @@ fun HarakaPaymentDialog(
                                                         onPaymentSuccess()
                                                     },
                                                     onFailure = { err ->
-                                                        errorMessage = err.message ?: "Hitilafu imetokea. Tafadhali jaribu tena."
+                                                        errorMessage = err.message ?: "Malipo hayajathibitishwa na HarakaPay. Tafadhali hakikisha umeweka PIN kwenye simu yako."
                                                     }
                                                 )
                                             }
@@ -1002,7 +1009,7 @@ fun HarakaPaymentDialog(
 
                                             isPastingVerifying = true
                                             scope.launch {
-                                                val result = repo.confirmPaymentOrder(cleanId, overrideSuccess = true)
+                                                val result = repo.confirmPaymentOrder(cleanId)
                                                 isPastingVerifying = false
                                                 result.fold(
                                                     onSuccess = { confirmedOrder ->
@@ -1101,7 +1108,7 @@ fun HarakaPaymentDialog(
                                                     },
                                                     onConfirmNow = {
                                                         scope.launch {
-                                                            val res = repo.confirmPaymentOrder(order.orderId, overrideSuccess = true)
+                                                            val res = repo.confirmPaymentOrder(order.orderId)
                                                             res.fold(
                                                                 onSuccess = {
                                                                     activeOrderId = order.orderId

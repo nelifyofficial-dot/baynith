@@ -24,6 +24,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
 /**
@@ -100,6 +101,55 @@ object MovieRecommendationScheduler {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error cancelling notification alarm: ${e.message}")
+        }
+    }
+
+    private const val DAILY_NOON_REQUEST_CODE = 4502
+
+    /**
+     * Schedules a daily check at 12:00 PM (Noon).
+     * If user has not opened the app since morning, sends 2 movie recommendation notifications.
+     */
+    fun scheduleDailyNoonCheck(context: Context) {
+        try {
+            createChannel(context)
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+            val intent = Intent(context, DailyNoonNotificationReceiver::class.java)
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                DAILY_NOON_REQUEST_CODE,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val now = System.currentTimeMillis()
+            val noonCal = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 12)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                if (timeInMillis <= now) {
+                    add(Calendar.DAY_OF_YEAR, 1)
+                }
+            }
+
+            val triggerAtMillis = noonCal.timeInMillis
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+            } else {
+                alarmManager.set(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+            }
+            Log.d(TAG, "Scheduled daily noon check for timestamp: $triggerAtMillis")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule daily noon check alarm: ${e.message}", e)
         }
     }
 }
@@ -256,6 +306,168 @@ class PeriodicMovieNotificationReceiver : BroadcastReceiver() {
     }
 }
 
+/**
+ * Handles daily 12:00 PM (Noon) alarm.
+ * If user hasn't opened NeliPlay since morning, sends 2 movie recommendation notifications.
+ */
+class DailyNoonNotificationReceiver : BroadcastReceiver() {
+    private val scope = CoroutineScope(Dispatchers.IO)
+
+    private val safeFallbackMovies = listOf(
+        Pair("Blue Beetle (Kiswahili DJ)", "Tazama kijana Jaime Reyes akipata suti ya kichawi ya mende yenye nguvu za ajabu!"),
+        Pair("Avatar: Fire and Ash", "Mchanganyiko wa maisha na vita vya viumbe wa anga za juu huko Pandora."),
+        Pair("Spider-Man: Across the Multiverse", "Miles Morales anapambana kuokoa ulimwengu wote na mashujaa wenzake."),
+        Pair("Black Panther: Wakanda", "Ufalme wa Wakanda unalinda rasilimali na amani ya watu wake dhidi ya maadui."),
+        Pair("Jumanji: The Next Level", "Vituko vya ajabu ndani ya mchezo wa msituni na wanyama wakali."),
+        Pair("Fast X (DJ Murphy)", "Mbio za kasi na mapigano ya kifamilia ya Dominic Toretto na kikosi chake.")
+    )
+
+    override fun onReceive(context: Context, intent: Intent?) {
+        Log.d("DailyNoonReceiver", "Noon notification check triggered.")
+        // Reschedule for next day's noon
+        MovieRecommendationScheduler.scheduleDailyNoonCheck(context)
+
+        scope.launch {
+            try {
+                val prefs = context.getSharedPreferences("neliplay_prefs", Context.MODE_PRIVATE)
+                val lastOpen = prefs.getLong("last_app_open_time", 0L)
+
+                // Start of today at 05:00 AM
+                val morningCal = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, 5)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+
+                val hasNotEnteredSinceMorning = lastOpen < morningCal.timeInMillis
+                Log.d("DailyNoonReceiver", "lastOpen=$lastOpen, morningThreshold=${morningCal.timeInMillis}, hasNotEntered=$hasNotEnteredSinceMorning")
+
+                // Fetch 2 clean published movies
+                val movies = fetchTwoMovies(context)
+                val m1 = movies.getOrNull(0) ?: Movie(title = safeFallbackMovies[0].first, overview = safeFallbackMovies[0].second)
+                val m2 = movies.getOrNull(1) ?: Movie(title = safeFallbackMovies[1].first, overview = safeFallbackMovies[1].second)
+
+                // Send 1st Movie Notification (ID: 8801)
+                sendMovieNotification(
+                    context = context,
+                    notificationId = 8801,
+                    title = "☀️ Habari ya Mchana! Tazama Filamu Leo",
+                    movieTitle = m1.title,
+                    overview = m1.overview.ifBlank { "Filamu kali iliyotafsiriwa inakusubiri sasa!" },
+                    artworkUrl = m1.posterPath.ifBlank { m1.backdropPath },
+                    targetMovieId = m1.id
+                )
+
+                // If user hasn't opened app since morning, send 2nd Movie Notification (ID: 8802) as requested!
+                if (hasNotEnteredSinceMorning) {
+                    kotlinx.coroutines.delay(1000)
+                    sendMovieNotification(
+                        context = context,
+                        notificationId = 8802,
+                        title = "🔥 Filamu Nyingine Kali ya Mchana Huu",
+                        movieTitle = m2.title,
+                        overview = m2.overview.ifBlank { "Burudika mchana huu na hadithi yenye mvuto mkubwa!" },
+                        artworkUrl = m2.posterPath.ifBlank { m2.backdropPath },
+                        targetMovieId = m2.id
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("DailyNoonReceiver", "Failed to process noon notifications: ${e.message}", e)
+            }
+        }
+    }
+
+    private suspend fun fetchTwoMovies(context: Context): List<Movie> {
+        return try {
+            val firestore = FirebaseManager.firestore
+            val querySnapshot = firestore.collection("movies")
+                .whereEqualTo("published", true)
+                .limit(8)
+                .get()
+                .await()
+
+            val cleanMovies = querySnapshot.documents.mapNotNull { doc ->
+                val movie = Movie.fromDocument(doc)
+                val isAdult = movie.genres.any { g ->
+                    g.contains("erotic", ignoreCase = true) ||
+                    g.contains("adult", ignoreCase = true) ||
+                    g.contains("18+", ignoreCase = true) ||
+                    g.contains("xxx", ignoreCase = true)
+                }
+                if (!isAdult && movie.title.isNotBlank()) movie else null
+            }
+            if (cleanMovies.size >= 2) cleanMovies.shuffled().take(2) else emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun sendMovieNotification(
+        context: Context,
+        notificationId: Int,
+        title: String,
+        movieTitle: String,
+        overview: String,
+        artworkUrl: String?,
+        targetMovieId: String
+    ) {
+        val notificationIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (targetMovieId.isNotBlank()) {
+                putExtra("EXTRA_NAVIGATE_MOVIE_ID", targetMovieId)
+            }
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            notificationIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val posterBitmap: Bitmap? = try {
+            if (!artworkUrl.isNullOrBlank()) {
+                val loader = ImageLoader(context)
+                val req = ImageRequest.Builder(context)
+                    .data(artworkUrl)
+                    .allowHardware(false)
+                    .build()
+                val result = kotlinx.coroutines.runBlocking { (loader.execute(req) as? SuccessResult)?.drawable }
+                (result as? android.graphics.drawable.BitmapDrawable)?.bitmap
+            } else {
+                BitmapFactory.decodeResource(context.resources, R.drawable.ic_neliplay_logo)
+            }
+        } catch (_: Exception) {
+            null
+        }
+
+        val bigText = "🎬 $movieTitle\n$overview\n\nBofya hapa kutazama sasa bila kikomo!"
+
+        val builder = NotificationCompat.Builder(context, MovieRecommendationScheduler.CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_neliplay_logo)
+            .setContentTitle(title)
+            .setContentText("🎬 $movieTitle - $overview")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .addAction(R.drawable.ic_neliplay_logo, "▶ Tazama Sasa", pendingIntent)
+
+        if (posterBitmap != null) {
+            builder.setLargeIcon(posterBitmap)
+        }
+
+        try {
+            val notificationManager = NotificationManagerCompat.from(context)
+            notificationManager.notify(notificationId, builder.build())
+            Log.d("DailyNoonReceiver", "Notification $notificationId ($movieTitle) delivered!")
+        } catch (e: SecurityException) {
+            Log.w("DailyNoonReceiver", "Notification permission not granted: ${e.message}")
+        }
+    }
+}
+
 class MovieNotificationBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action
@@ -263,9 +475,9 @@ class MovieNotificationBootReceiver : BroadcastReceiver() {
             action == "android.intent.action.QUICKBOOT_POWERON" ||
             action == "com.htc.intent.action.QUICKBOOT_POWERON"
         ) {
-            Log.d("MovieBootReceiver", "Device boot detected. Re-scheduling 30-minute movie notifications...")
-            // First notification fires 5 minutes after reboot, then every 30 minutes
+            Log.d("MovieBootReceiver", "Device boot detected. Re-scheduling movie notifications...")
             MovieRecommendationScheduler.scheduleNext(context, 5 * 60 * 1000L)
+            MovieRecommendationScheduler.scheduleDailyNoonCheck(context)
         }
     }
 }

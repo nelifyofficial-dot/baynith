@@ -42,6 +42,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -82,6 +84,7 @@ fun AuthScreen(
     val authRepo = remember { AuthRepository() }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     var isSignUpTab by remember { mutableStateOf(false) }
     var emailOrUsername by remember { mutableStateOf("") }
@@ -91,7 +94,32 @@ fun AuthScreen(
     var password by remember { mutableStateOf("") }
     var isPasswordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    var isGoogleLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Automatic silent Google account detection & login (mirroring YouTube on Android)
+    LaunchedEffect(Unit) {
+        try {
+            val autoResult = authRepo.attemptAutoGoogleLogin(context)
+            autoResult.onSuccess {
+                onAuthSuccess()
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun handleGoogleSignIn() {
+        isGoogleLoading = true
+        errorMessage = null
+        scope.launch {
+            val result = authRepo.signInWithGoogle(context, autoSelectOnly = false)
+            isGoogleLoading = false
+            result.onSuccess {
+                onAuthSuccess()
+            }.onFailure { err ->
+                errorMessage = err.message ?: "Kuingia na Google kumeshindwa. Tafadhali jaribu tena."
+            }
+        }
+    }
 
     fun handleSignIn() {
         val identifier = emailOrUsername.trim()
@@ -266,6 +294,97 @@ fun AuthScreen(
                         .fillMaxWidth()
                         .padding(20.dp)
                 ) {
+                    // Google One-Tap / Auto-Login Button (Like YouTube)
+                    Button(
+                        onClick = { handleGoogleSignIn() },
+                        enabled = !isGoogleLoading && !isLoading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .testTag("google_login_button")
+                    ) {
+                        if (isGoogleLoading) {
+                            CircularProgressIndicator(
+                                color = Color(0xFF4285F4),
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(26.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFF1F3F4)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "G",
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 17.sp,
+                                        color = Color(0xFF4285F4)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(horizontalAlignment = Alignment.Start) {
+                                    Text(
+                                        text = "Ingia na Google (Bila Nenosiri)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = Color(0xFF1F1F1F)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "⚡ Inasoma akaunti ya Google ya simu yako kama ilivyo kwenye YouTube.",
+                        color = NeliTextSecondary,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // OR Divider
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(1.dp)
+                                .background(NeliSurfaceVariant)
+                        )
+                        Text(
+                            text = "  AU WEKA NENOSIRI  ",
+                            color = NeliTextSecondary.copy(alpha = 0.6f),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(1.dp)
+                                .background(NeliSurfaceVariant)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
                     // Segmented Control Tabs (Ingia vs Jisajili)
                     Row(
                         modifier = Modifier

@@ -1,5 +1,6 @@
 package com.example.ui.series
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
@@ -322,6 +324,56 @@ fun SeriesDetailsScreen(
                             }
                         }
 
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Full Series Download Button
+                        Button(
+                            onClick = {
+                                if (series.isPremium && !uiState.isUserPremium) {
+                                    showPremiumRequiredDialog = true
+                                } else {
+                                    val count = viewModel.downloadFullSeries()
+                                    if (count > 0) {
+                                        Toast.makeText(
+                                            context,
+                                            "Upakuaji wa vipindi $count vya ${series.name} umeanza kwenye folda moja!",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "Hakuna vipindi vinavyoweza kupakuliwa kwa sasa.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            },
+                            enabled = uiState.allEpisodes.isNotEmpty(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = NeliSurfaceElevated,
+                                contentColor = NeliCyanAccent
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("series_download_all_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = "Download Full Series",
+                                modifier = Modifier.size(20.dp),
+                                tint = NeliCyanAccent
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Pakua Series Nzima (${uiState.allEpisodes.size} Vipindi)",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(14.dp))
 
                         // Overview
@@ -395,6 +447,18 @@ fun SeriesDetailsScreen(
                                 } else {
                                     onPlayEpisode(episode.id)
                                 }
+                            },
+                            onDownload = {
+                                if ((series.isPremium || episode.isPremium) && !uiState.isUserPremium) {
+                                    showPremiumRequiredDialog = true
+                                } else {
+                                    viewModel.downloadEpisode(episode)
+                                    Toast.makeText(
+                                        context,
+                                        "Inapakua S${episode.seasonNumber}:E${episode.episodeNumber} kwenye folda la ${series.name}...",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
                             }
                         )
                     }
@@ -458,7 +522,8 @@ fun SeriesDetailsScreen(
 @Composable
 fun EpisodeItemRow(
     episode: Episode,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDownload: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -538,6 +603,25 @@ fun EpisodeItemRow(
                     lineHeight = 16.sp
                 )
             }
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Episode Download Button
+        IconButton(
+            onClick = onDownload,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(NeliSurfaceElevated)
+                .testTag("download_ep_${episode.id}")
+        ) {
+            Icon(
+                imageVector = Icons.Default.Download,
+                contentDescription = "Download Episode ${episode.episodeNumber}",
+                tint = NeliCyanAccent,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

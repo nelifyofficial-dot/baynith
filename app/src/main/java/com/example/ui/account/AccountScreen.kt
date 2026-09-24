@@ -404,7 +404,7 @@ fun AccountScreen(
                                         orderCheckResult = null
                                         scope.launch {
                                             val repo = PaymentOrderRepository.getInstance(context)
-                                            val res = repo.confirmPaymentOrder(id, overrideSuccess = true)
+                                            val res = repo.confirmPaymentOrder(id)
                                             isCheckingOrder = false
                                             res.fold(
                                                 onSuccess = { confirmedOrder ->

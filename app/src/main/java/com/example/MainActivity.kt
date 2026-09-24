@@ -42,6 +42,13 @@ class MainActivity : FragmentActivity() {
         com.example.util.NeliNotificationManager.initChannels(this)
         com.example.util.MovieRecommendationScheduler.createChannel(this)
         com.example.util.MovieRecommendationScheduler.scheduleNext(this)
+        com.example.util.MovieRecommendationScheduler.scheduleDailyNoonCheck(this)
+
+        // Record app open timestamp for noon notification check
+        getSharedPreferences("neliplay_prefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putLong("last_app_open_time", System.currentTimeMillis())
+            .apply()
 
         // Request notification permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -63,6 +70,14 @@ class MainActivity : FragmentActivity() {
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        getSharedPreferences("neliplay_prefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putLong("last_app_open_time", System.currentTimeMillis())
+            .apply()
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -61,7 +61,12 @@
             android:name=".util.PeriodicMovieNotificationReceiver"
             android:exported="false" />
 
-        <!-- Boot Receiver to keep 30-min movie notifications alive even after reboot -->
+        <!-- Daily Noon Movie Recommendation Receiver (sends 2 movies if user inactive since morning) -->
+        <receiver
+            android:name=".util.DailyNoonNotificationReceiver"
+            android:exported="false" />
+
+        <!-- Boot Receiver to keep movie notifications alive even after reboot -->
         <receiver
             android:name=".util.MovieNotificationBootReceiver"
             android:exported="true">
