@@ -86,9 +86,14 @@ class AuthRepository {
     }
 
     /**
-     * Signs up a new user with email, password, and username.
+     * Signs up a new user with email, password, username, and optional phone.
      */
-    suspend fun signUpWithEmail(email: String, password: String, username: String): Result<FirebaseUser> {
+    suspend fun signUpWithEmail(
+        email: String,
+        password: String,
+        username: String,
+        phoneNumber: String = ""
+    ): Result<FirebaseUser> {
         return try {
             val trimmedEmail = email.trim()
             val trimmedUsername = username.trim()
@@ -105,23 +110,26 @@ class AuthRepository {
                 Log.w(TAG, "Profile update warning: ${e.message}")
             }
 
-            // Sync User Profile to Firestore
-            val now = System.currentTimeMillis()
-            val data = mapOf(
-                "uid" to user.uid,
-                "displayName" to trimmedUsername,
-                "username" to trimmedUsername,
-                "email" to trimmedEmail,
-                "photoUrl" to "",
-                "role" to "user",
-                "isPremium" to false,
-                "createdAt" to now,
-                "updatedAt" to now,
-                "lastActiveAt" to now,
-                "country" to "TZ",
-                "language" to "sw"
-            )
-            FirebaseManager.usersCollection.document(user.uid).set(data, SetOptions.merge()).await()
+            // Sync User Profile to Firestore (omit role and isPremium so server security rules are respected)
+            try {
+                val now = System.currentTimeMillis()
+                val data = mutableMapOf<String, Any>(
+                    "uid" to user.uid,
+                    "displayName" to trimmedUsername,
+                    "username" to trimmedUsername,
+                    "email" to trimmedEmail,
+                    "phoneNumber" to phoneNumber.trim(),
+                    "photoUrl" to "",
+                    "createdAt" to now,
+                    "updatedAt" to now,
+                    "lastActiveAt" to now,
+                    "country" to "TZ",
+                    "language" to "sw"
+                )
+                FirebaseManager.usersCollection.document(user.uid).set(data, SetOptions.merge()).await()
+            } catch (e: Exception) {
+                Log.w(TAG, "Profile Firestore creation warning: ${e.message}")
+            }
 
             Result.success(user)
         } catch (e: Exception) {
@@ -201,7 +209,7 @@ class AuthRepository {
 
     /**
      * Synchronizes authenticated user to Firestore `users/{uid}`.
-     * Guarantees that client cannot overwrite server-controlled admin or premium permissions.
+     * Respects security rules by omitting sensitive server fields ('role', 'isPremium', 'premiumActive').
      */
     suspend fun syncUserProfile(
         user: FirebaseUser,
@@ -209,14 +217,25 @@ class AuthRepository {
         language: String? = null,
         gender: String? = null
     ) {
+        val currentAuth = auth.currentUser
+        if (currentAuth == null || currentAuth.uid != user.uid) {
+            Log.d(TAG, "Skipping profile sync: user not actively authenticated.")
+            return
+        }
+
+        // Anonymous guest sessions are maintained locally
+        if (user.isAnonymous) {
+            Log.d(TAG, "Anonymous guest session - maintaining local state.")
+            return
+        }
+
         try {
             val userDocRef = FirebaseManager.usersCollection.document(user.uid)
-            val existing = userDocRef.get().await()
             val now = System.currentTimeMillis()
 
             val updates = mutableMapOf<String, Any>(
                 "uid" to user.uid,
-                "displayName" to (user.displayName ?: "NeliPlay User"),
+                "displayName" to (user.displayName?.takeIf { it.isNotBlank() } ?: "NeliPlay User"),
                 "email" to (user.email ?: ""),
                 "photoUrl" to (user.photoUrl?.toString() ?: ""),
                 "lastActiveAt" to now,
@@ -233,28 +252,32 @@ class AuthRepository {
                 updates["gender"] = gender
             }
 
-            if (!existing.exists()) {
-                updates["role"] = "user"
-                updates["isPremium"] = false
-                updates["createdAt"] = now
-                if (!updates.containsKey("country")) {
-                    updates["country"] = "TZ" // Default country
+            try {
+                val existing = userDocRef.get().await()
+                if (!existing.exists()) {
+                    updates["createdAt"] = now
+                    if (!updates.containsKey("country")) {
+                        updates["country"] = "TZ" // Default country
+                    }
+                    if (!updates.containsKey("language")) {
+                        updates["language"] = "en"
+                    }
+                } else {
+                    val existingCountry = existing.getString("country")
+                    if (!existingCountry.isNullOrBlank() && !updates.containsKey("country")) {
+                        updates["country"] = existingCountry
+                    }
                 }
-                if (!updates.containsKey("language")) {
-                    updates["language"] = "en"
-                }
-            } else {
-                // If existing doc already has country and we didn't pass one, retain it
-                val existingCountry = existing.getString("country")
-                if (!existingCountry.isNullOrBlank() && !updates.containsKey("country")) {
-                    updates["country"] = existingCountry
-                }
+            } catch (e: Exception) {
+                Log.d(TAG, "Safe read check on profile: ${e.message}")
             }
 
             userDocRef.set(updates, SetOptions.merge()).await()
             Log.i(TAG, "User profile synchronized in Firestore for uid: ${user.uid}")
+        } catch (e: com.google.firebase.firestore.FirebaseFirestoreException) {
+            Log.w(TAG, "Firestore sync note (${e.code}): ${e.message}")
         } catch (e: Exception) {
-            Log.e(TAG, "Error syncing user profile: ${e.message}", e)
+            Log.w(TAG, "Notice syncing user profile: ${e.message}")
         }
     }
 

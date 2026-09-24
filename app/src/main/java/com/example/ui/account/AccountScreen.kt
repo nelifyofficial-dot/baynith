@@ -1,10 +1,13 @@
 package com.example.ui.account
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,58 +25,32 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.automirrored.filled.Help
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.DeleteForever
-import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,34 +58,28 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
-import com.example.BuildConfig
-import com.example.R
-import com.example.data.model.UserProfile
-import com.example.ui.components.CountryPickerDialog
+import com.example.data.payment.harakapay.HarakaPayClient
+import com.example.data.repository.SubscriptionManager
 import com.example.ui.components.NeliPlayLogo
-import com.example.ui.theme.NeliBluePrimary
 import com.example.ui.theme.NeliCyanAccent
-import com.example.ui.theme.NeliLiveRed
-import com.example.ui.theme.NeliSurface
+import com.example.ui.theme.NeliGreenSuccess
 import com.example.ui.theme.NeliSurfaceElevated
 import com.example.ui.theme.NeliSurfaceVariant
-import com.example.ui.theme.NeliTextPrimary
 import com.example.ui.theme.NeliTextSecondary
+import com.example.ui.theme.NeliVioletNeon
 import com.example.ui.theme.NeliVoid
-import com.example.util.Country
-import com.example.util.RegionService
-import com.google.firebase.auth.FirebaseUser
+import com.example.util.MovieRecommendationScheduler
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun AccountScreen(
@@ -120,1207 +91,485 @@ fun AccountScreen(
     onNavigateToPremium: () -> Unit = {},
     viewModel: AccountViewModel = viewModel()
 ) {
-    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val subState by SubscriptionManager.state.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val scrollState = rememberScrollState()
 
-    var showSignOutDialog by remember { mutableStateOf(false) }
-    var showDeleteAccountDialog by remember { mutableStateOf(false) }
-    var showCountryPickerDialog by remember { mutableStateOf(false) }
-    var showPremiumInfoDialog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(uiState.message, uiState.error) {
-        val msg = uiState.message ?: uiState.error
-        if (!msg.isNullOrBlank()) {
-            snackbarHostState.showSnackbar(msg)
-            viewModel.clearMessage()
-        }
-    }
-
-    val user = uiState.currentUser
-    val profile = uiState.profile
-    val isSignedIn = user != null
-    val country = uiState.countryObj
+    var orderIdInput by remember { mutableStateOf("") }
+    var orderCheckResult by remember { mutableStateOf<String?>(null) }
+    var isCheckingOrder by remember { mutableStateOf(false) }
+    var showTestNotificationToast by remember { mutableStateOf(false) }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = NeliVoid,
-        modifier = modifier.fillMaxSize()
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(NeliVoid)
-                .statusBarsPadding()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-                .testTag("account_screen")
-        ) {
-            // Header Bar
+        topBar = {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 20.dp),
+                    .background(NeliVoid)
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column {
-                    Text(
-                        text = "Account",
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = NeliTextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (isSignedIn) "Manage your profile & synced library" else "Optional sign-in for cloud synchronization",
-                        fontSize = 13.sp,
-                        color = NeliTextSecondary
-                    )
-                }
-
-                // Region Indicator Pill
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(NeliSurfaceElevated)
-                        .border(1.dp, NeliSurfaceVariant, RoundedCornerShape(10.dp))
-                        .clickable { showCountryPickerDialog = true }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                        .testTag("region_selector_pill")
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = country.flagEmoji, fontSize = 14.sp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = country.code,
-                            color = NeliCyanAccent,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-
-            // ==========================================
-            // SWITCH BETWEEN STATE A AND STATE B
-            // ==========================================
-            if (isSignedIn && user != null) {
-                // STATE B — LOGGED IN
-                LoggedInSection(
-                    user = user,
-                    profile = profile,
-                    country = country,
-                    favoritesCount = uiState.favoritesCount,
-                    continueWatchingCount = uiState.continueWatchingCount,
-                    onNavigateToWatchlist = onNavigateToFavorites,
-                    onNavigateToWatchHistory = onNavigateToFavorites,
-                    onNavigateToDownloads = onNavigateToDownloads,
-                    onOpenPremium = onNavigateToPremium,
-                    onNavigateToSettings = onNavigateToSettings,
-                    onChangeCountry = { showCountryPickerDialog = true },
-                    onSignOutClick = { showSignOutDialog = true },
-                    onDeleteAccountClick = { showDeleteAccountDialog = true }
-                )
-            } else {
-                // STATE A — NOT LOGGED IN
-                NotLoggedInSection(
-                    country = country,
-                    isSigningIn = uiState.isSigningIn,
-                    isSigningUp = uiState.isSigningUp,
-                    isGuestSigningIn = uiState.isGuestSigningIn,
-                    onSignIn = { emailOrUser, pass -> viewModel.signIn(emailOrUser, pass) },
-                    onSignUp = { email, pass, username -> viewModel.signUp(email, pass, username) },
-                    onQuickSignIn = { viewModel.signInAsGuest() },
-                    onContinueWithoutAccount = onNavigateToHome,
-                    onSelectCountry = { showCountryPickerDialog = true },
-                    onNavigateToSettings = onNavigateToSettings,
-                    onNavigateToPremium = onNavigateToPremium
-                )
-            }
-
-            Spacer(modifier = Modifier.height(80.dp))
-        }
-    }
-
-    // Country Picker Dialog
-    if (showCountryPickerDialog) {
-        CountryPickerDialog(
-            selectedCountryCode = uiState.effectiveCountryCode,
-            onCountrySelected = { selected ->
-                viewModel.selectCountry(selected.code)
-            },
-            onDismissRequest = { showCountryPickerDialog = false }
-        )
-    }
-
-    // Premium Status Info Dialog
-    if (showPremiumInfoDialog) {
-        val isPremium = profile?.isPremium == true || profile?.isAdmin == true
-        AlertDialog(
-            onDismissRequest = { showPremiumInfoDialog = false },
-            title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.WorkspacePremium,
-                        contentDescription = null,
-                        tint = NeliCyanAccent,
-                        modifier = Modifier.size(24.dp)
-                    )
+                    NeliPlayLogo(size = 32)
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = if (isPremium) "NeliPlay Premium Active" else "NeliPlay Membership",
+                        text = "Akaunti Yangu",
                         color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                }
-            },
-            text = {
-                Column {
-                    Text(
-                        text = if (isPremium)
-                            "You have unlimited access to all high-definition streams, Swahili dubbed releases, and ad-free playback."
-                        else
-                            "All standard movies and series are free to browse and stream. Sign in enables cloud sync across all your devices.",
-                        color = NeliTextSecondary,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Current Plan: ${if (profile?.isAdmin == true) "Administrator" else if (profile?.isPremium == true) "VIP Premium" else "Standard (Free)"}",
-                        color = NeliCyanAccent,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showPremiumInfoDialog = false }) {
-                    Text("OK", color = Color.White)
-                }
-            },
-            containerColor = NeliSurfaceElevated,
-            shape = RoundedCornerShape(16.dp)
-        )
-    }
-
-    // Sign Out Confirmation Dialog
-    if (showSignOutDialog) {
-        AlertDialog(
-            onDismissRequest = { showSignOutDialog = false },
-            title = {
-                Text(
-                    text = "Sign Out",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
-            },
-            text = {
-                Text(
-                    text = "Are you sure you want to sign out? Your cloud watchlist, history, and profile will remain safely stored on Firebase and restored next time you sign in.",
-                    color = NeliTextSecondary,
-                    fontSize = 14.sp
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showSignOutDialog = false
-                        viewModel.signOut(context)
-                    }
-                ) {
-                    Text(
-                        text = "Sign Out",
-                        color = Color(0xFFFF8A80),
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSignOutDialog = false }) {
-                    Text("Cancel", color = Color.White)
-                }
-            },
-            containerColor = NeliSurfaceElevated,
-            shape = RoundedCornerShape(16.dp)
-        )
-    }
 
-    // Delete Account Confirmation Dialog
-    if (showDeleteAccountDialog) {
-        AlertDialog(
-            onDismissRequest = { if (!uiState.isDeletingAccount) showDeleteAccountDialog = false },
-            title = {
-                Text(
-                    text = "Delete your NeliPlay account?",
-                    color = NeliLiveRed,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
-            },
-            text = {
-                Text(
-                    text = "This action is permanent and cannot be undone. Account-related cloud data (including your watchlist, watch history, and user profile) will be deleted immediately according to NeliPlay's data policy.",
-                    color = NeliTextSecondary,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !uiState.isDeletingAccount,
-                    onClick = {
-                        viewModel.deleteAccount(context)
-                        showDeleteAccountDialog = false
-                    }
-                ) {
-                    if (uiState.isDeletingAccount) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = NeliLiveRed)
-                    } else {
-                        Text("Delete Account", color = NeliLiveRed, fontWeight = FontWeight.Bold)
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    enabled = !uiState.isDeletingAccount,
-                    onClick = { showDeleteAccountDialog = false }
-                ) {
-                    Text("Cancel", color = Color.White)
-                }
-            },
-            containerColor = NeliSurfaceElevated,
-            shape = RoundedCornerShape(16.dp)
-        )
-    }
-}
-
-/**
- * STATE A — NOT LOGGED IN
- * Authentication with Email, Password, and Username only (No Google).
- */
-@Composable
-private fun NotLoggedInSection(
-    country: Country,
-    isSigningIn: Boolean,
-    isSigningUp: Boolean,
-    isGuestSigningIn: Boolean,
-    onSignIn: (emailOrUser: String, pass: String) -> Unit,
-    onSignUp: (email: String, pass: String, username: String) -> Unit,
-    onQuickSignIn: () -> Unit,
-    onContinueWithoutAccount: () -> Unit,
-    onSelectCountry: () -> Unit,
-    onNavigateToSettings: () -> Unit,
-    onNavigateToPremium: () -> Unit = {}
-) {
-    var isSignUpTab by remember { mutableStateOf(false) }
-    var username by remember { mutableStateOf("") }
-    var emailOrUsername by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var isPasswordVisible by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("not_logged_in_section")
-    ) {
-        // Hero Card
-        Card(
-            colors = CardDefaults.cardColors(containerColor = NeliSurface),
-            shape = RoundedCornerShape(22.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, NeliSurfaceVariant, RoundedCornerShape(22.dp))
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // NeliPlay Logo Branding
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    NeliBluePrimary.copy(alpha = 0.4f),
-                                    NeliCyanAccent.copy(alpha = 0.25f)
-                                )
-                            )
-                        )
-                        .border(1.5.dp, NeliCyanAccent.copy(alpha = 0.6f), CircleShape),
+                        .background(Color(0x18FFFFFF))
+                        .clickable(onClick = onNavigateToSettings),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "NeliPlay Swahili",
-                        tint = NeliCyanAccent,
-                        modifier = Modifier.size(34.dp)
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Mipangilio",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
+            }
+        },
+        modifier = modifier.fillMaxSize()
+    ) { innerPadding ->
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            val contentWidth = if (maxWidth >= 600.dp) 560.dp else maxWidth
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Neliplay",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(NeliCyanAccent)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "SWAHILI",
-                            color = Color.Black,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Black
+            Column(
+                modifier = Modifier
+                    .width(contentWidth)
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+                // 1. Sleek Profile & VIP Membership Card
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(Color(0xFF20174D), Color(0xFF130E2E))
+                            )
                         )
+                        .border(
+                            width = 1.dp,
+                            color = if (subState.isVip) Color(0xFFFFD700) else Color(0x338B5CF6),
+                            shape = RoundedCornerShape(20.dp)
+                        )
+                        .padding(18.dp)
+                ) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // User Avatar
+                            Box(
+                                modifier = Modifier
+                                    .size(54.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(NeliVioletNeon, NeliCyanAccent)
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(14.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                val displayName = uiState.currentUser?.displayName
+                                    ?: uiState.profile?.displayName
+                                    ?: "Mpenzi wa NeliPlay"
+
+                                val emailOrPhone = uiState.currentUser?.email
+                                    ?: uiState.currentUser?.phoneNumber
+                                    ?: "07XX XXX XXX"
+
+                                Text(
+                                    text = displayName,
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                Text(
+                                    text = emailOrPhone,
+                                    color = NeliTextSecondary,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            // Status Pill
+                            if (subState.isVip) {
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(0xFFFFD700))
+                                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = Color.Black,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "VIP",
+                                        color = Color.Black,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(0x22FFFFFF))
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                ) {
+                                    Text(
+                                        text = "BURE",
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Membership details banner inside card
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0x18FFFFFF))
+                                .padding(12.dp)
+                        ) {
+                            if (subState.isVip) {
+                                val dateStr = SimpleDateFormat("dd MMMM yyyy", Locale.getDefault())
+                                    .format(Date(subState.expiresAtMillis))
+                                Column {
+                                    Text(
+                                        text = "Kifurushi: ${subState.planName}",
+                                        color = Color(0xFFFFD700),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Kinaisha tarehe: $dateStr",
+                                        color = NeliTextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Boresha Kuwa VIP",
+                                            color = Color.White,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Kuanzia TSh 100 tu kwa filamu!",
+                                            color = NeliTextSecondary,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+
+                                    Button(
+                                        onClick = onNavigateToPremium,
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFFFFD700)
+                                        ),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                            horizontal = 12.dp,
+                                            vertical = 6.dp
+                                        )
+                                    ) {
+                                        Text(
+                                            text = "JIUNGE",
+                                            color = Color.Black,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    text = if (isSignUpTab) "Unda akaunti yako mpya ukitumia jina, barua pepe na nenosiri."
-                    else "Ingia ukitumia barua pepe/jina la mtumiaji na nenosiri.",
-                    fontSize = 13.sp,
-                    color = NeliTextSecondary,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                )
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Tab Selector (Ingia vs Jisajili)
-                Row(
+                // 2. HarakaPay Order Status Checker Card
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(16.dp))
                         .background(NeliSurfaceVariant)
-                        .padding(4.dp)
+                        .border(1.dp, Color(0x338B5CF6), RoundedCornerShape(16.dp))
+                        .padding(16.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(9.dp))
-                            .background(if (!isSignUpTab) NeliBluePrimary else Color.Transparent)
-                            .clickable { isSignUpTab = false }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Ingia (Sign In)",
-                            fontWeight = if (!isSignUpTab) FontWeight.Bold else FontWeight.Normal,
-                            color = if (!isSignUpTab) Color.White else NeliTextSecondary,
-                            fontSize = 13.sp
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(9.dp))
-                            .background(if (isSignUpTab) NeliBluePrimary else Color.Transparent)
-                            .clickable { isSignUpTab = true }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Jisajili (Sign Up)",
-                            fontWeight = if (isSignUpTab) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSignUpTab) Color.White else NeliTextSecondary,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                if (isSignUpTab) {
-                    // SIGN UP FORM: Username, Email, Password
-                    OutlinedTextField(
-                        value = username,
-                        onValueChange = { username = it },
-                        label = { Text("Jina la mtumiaji (Username)") },
-                        leadingIcon = {
-                            Icon(Icons.Default.Person, contentDescription = null, tint = NeliCyanAccent)
-                        },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeliCyanAccent,
-                            unfocusedBorderColor = NeliSurfaceVariant,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedLabelColor = NeliCyanAccent,
-                            unfocusedLabelColor = NeliTextSecondary
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("signup_username_input")
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        label = { Text("Barua pepe (Email)") },
-                        leadingIcon = {
-                            Icon(Icons.Default.Email, contentDescription = null, tint = NeliCyanAccent)
-                        },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeliCyanAccent,
-                            unfocusedBorderColor = NeliSurfaceVariant,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedLabelColor = NeliCyanAccent,
-                            unfocusedLabelColor = NeliTextSecondary
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("signup_email_input")
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Nenosiri (Angalau herufi 6)") },
-                        leadingIcon = {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = NeliCyanAccent)
-                        },
-                        trailingIcon = {
-                            IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
-                                Icon(
-                                    imageVector = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                    contentDescription = "Toggle password visibility",
-                                    tint = NeliTextSecondary
-                                )
-                            }
-                        },
-                        visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeliCyanAccent,
-                            unfocusedBorderColor = NeliSurfaceVariant,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedLabelColor = NeliCyanAccent,
-                            unfocusedLabelColor = NeliTextSecondary
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("signup_password_input")
-                    )
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    Button(
-                        onClick = { onSignUp(email, password, username) },
-                        enabled = !isSigningUp && username.isNotBlank() && email.isNotBlank() && password.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = NeliBluePrimary,
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .testTag("submit_signup_button")
-                    ) {
-                        if (isSigningUp) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text("Inasajili...", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                        } else {
-                            Text("Fungua Akaunti (Sign Up)", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                } else {
-                    // SIGN IN FORM: Email or Username, Password
-                    OutlinedTextField(
-                        value = emailOrUsername,
-                        onValueChange = { emailOrUsername = it },
-                        label = { Text("Barua pepe au Jina la mtumiaji") },
-                        leadingIcon = {
-                            Icon(Icons.Default.AccountCircle, contentDescription = null, tint = NeliCyanAccent)
-                        },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeliCyanAccent,
-                            unfocusedBorderColor = NeliSurfaceVariant,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedLabelColor = NeliCyanAccent,
-                            unfocusedLabelColor = NeliTextSecondary
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("signin_email_username_input")
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Nenosiri") },
-                        leadingIcon = {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = NeliCyanAccent)
-                        },
-                        trailingIcon = {
-                            IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
-                                Icon(
-                                    imageVector = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                    contentDescription = "Toggle password visibility",
-                                    tint = NeliTextSecondary
-                                )
-                            }
-                        },
-                        visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeliCyanAccent,
-                            unfocusedBorderColor = NeliSurfaceVariant,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedLabelColor = NeliCyanAccent,
-                            unfocusedLabelColor = NeliTextSecondary
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("signin_password_input")
-                    )
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    Button(
-                        onClick = { onSignIn(emailOrUsername, password) },
-                        enabled = !isSigningIn && emailOrUsername.isNotBlank() && password.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = NeliBluePrimary,
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .testTag("submit_signin_button")
-                    ) {
-                        if (isSigningIn) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text("Inaingia...", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                        } else {
-                            Text("Ingia (Sign In)", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Guest / Quick sign-in
-                OutlinedButton(
-                    onClick = onQuickSignIn,
-                    enabled = !isGuestSigningIn && !isSigningIn && !isSigningUp,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = NeliCyanAccent
-                    ),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(
-                        brush = Brush.horizontalGradient(
-                            listOf(NeliSurfaceVariant, NeliCyanAccent.copy(alpha = 0.5f))
-                        )
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(46.dp)
-                        .testTag("quick_signin_button")
-                ) {
-                    if (isGuestSigningIn) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = NeliCyanAccent,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Inaingia...", fontSize = 13.sp)
-                    } else {
+                    Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = NeliCyanAccent,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            Text(text = "💳", fontSize = 16.sp)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Ingia kama Mgeni (Guest Mode)",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
+                                text = "Angalia Hali ya Malipo (HarakaPay)",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Continue without account
-                TextButton(
-                    onClick = onContinueWithoutAccount,
-                    modifier = Modifier.testTag("continue_without_account_button")
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Explore,
-                            contentDescription = null,
-                            tint = NeliTextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Endelea bila akaunti (Tazama Bure)",
-                            fontSize = 13.sp,
-                            color = NeliTextSecondary
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Country Selection Card
-        Text(
-            text = "YOUR COUNTRY",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = NeliCyanAccent,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
-        )
-
-        AccountItemRow(
-            icon = Icons.Default.Public,
-            title = "Country",
-            badgeText = "${country.flagEmoji}  ${country.name}",
-            onClick = onSelectCountry,
-            modifier = Modifier.testTag("country_select_row")
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Features Info
-        Text(
-            text = "WHY SIGN IN?",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = NeliTextSecondary,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
-        )
-
-        FeatureHighlightCard(
-            icon = Icons.Default.CloudSync,
-            title = "Watchlist & History Sync",
-            description = "Never lose your saved titles and continue watching right where you left off on any device."
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        FeatureHighlightCard(
-            icon = Icons.Default.Devices,
-            title = "Cross-Device Continuity",
-            description = "Start watching on your phone and resume seamlessly on your tablet or TV."
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // NeliPlay Premium Card for Guests / Non-Premium users
-        NeliPlayPremiumCard(
-            isPremium = false,
-            plan = null,
-            expiresDate = null,
-            onActionClick = onNavigateToPremium
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // App Settings
-        Text(
-            text = "APPLICATION",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = NeliTextSecondary,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
-        )
-
-        AccountItemRow(
-            icon = Icons.Default.Settings,
-            title = "Settings",
-            onClick = onNavigateToSettings,
-            modifier = Modifier.testTag("account_settings_row")
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        AccountItemRow(
-            icon = Icons.Default.Info,
-            title = "App Version",
-            badgeText = "v${BuildConfig.VERSION_NAME}",
-            onClick = {}
-        )
-    }
-}
-
-/**
- * STATE B — LOGGED IN
- * Shows Profile Photo, Name, Email, Country, Premium Status, and Action Buttons:
- * Watchlist, Watch History, Downloads, Premium, Settings, Delete Account, Sign Out.
- */
-@Composable
-private fun LoggedInSection(
-    user: FirebaseUser,
-    profile: UserProfile?,
-    country: Country,
-    favoritesCount: Int,
-    continueWatchingCount: Int,
-    onNavigateToWatchlist: () -> Unit,
-    onNavigateToWatchHistory: () -> Unit,
-    onNavigateToDownloads: () -> Unit,
-    onOpenPremium: () -> Unit,
-    onNavigateToSettings: () -> Unit,
-    onChangeCountry: () -> Unit,
-    onSignOutClick: () -> Unit,
-    onDeleteAccountClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("logged_in_section")
-    ) {
-        // User Profile Card
-        Card(
-            colors = CardDefaults.cardColors(containerColor = NeliSurface),
-            shape = RoundedCornerShape(22.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, NeliSurfaceVariant, RoundedCornerShape(22.dp))
-                .testTag("logged_in_card")
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Profile Photo
-                    val photoUrl = user.photoUrl?.toString() ?: profile?.photoUrl
-                    if (!photoUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = photoUrl,
-                            contentDescription = "User Avatar",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(70.dp)
-                                .clip(CircleShape)
-                                .border(2.dp, NeliCyanAccent, CircleShape)
-                        )
-                    } else {
-                        val initial = (user.displayName ?: profile?.displayName ?: "U")
-                            .take(1)
-                            .uppercase()
-                        Box(
-                            modifier = Modifier
-                                .size(70.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(NeliBluePrimary, NeliCyanAccent)
-                                    )
-                                )
-                                .border(2.dp, Color.White.copy(alpha = 0.3f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = initial,
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        // Name
-                        val displayName = when {
-                            !user.displayName.isNullOrBlank() -> user.displayName!!
-                            !profile?.displayName.isNullOrBlank() -> profile!!.displayName
-                            else -> "NeliPlay User"
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = displayName,
-                                fontSize = 19.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = NeliTextPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Verified",
-                                tint = NeliCyanAccent,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        // Email
-                        Text(
-                            text = user.email ?: profile?.email ?: "",
-                            fontSize = 13.sp,
-                            color = NeliTextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Country & Premium Badges
+                        Text(
+                            text = "Weka Order ID (mfano: HP1706123456789) kuthibitisha malipo:",
+                            color = NeliTextSecondary,
+                            fontSize = 12.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Country Badge
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(NeliSurfaceVariant)
-                                    .clickable(onClick = onChangeCountry)
-                                    .padding(horizontal = 8.dp, vertical = 3.dp)
-                            ) {
-                                Text(
-                                    text = "${country.flagEmoji} ${country.name}",
-                                    color = Color.White,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium
+                            OutlinedTextField(
+                                value = orderIdInput,
+                                onValueChange = { orderIdInput = it },
+                                placeholder = { Text("Order ID", color = Color.Gray, fontSize = 12.sp) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeliVioletNeon,
+                                    unfocusedBorderColor = Color(0x33FFFFFF),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
                                 )
-                            }
+                            )
 
-                            // Premium Status Badge
-                            val tierLabel = when {
-                                profile?.isAdmin == true -> "Admin"
-                                profile?.isPremium == true -> "Premium VIP"
-                                else -> "Free Tier"
-                            }
-                            val tierColor = when {
-                                profile?.isAdmin == true -> Color(0xFFFF9800)
-                                profile?.isPremium == true -> NeliCyanAccent
-                                else -> Color(0xFF64B5F6)
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(tierColor.copy(alpha = 0.2f))
-                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            Button(
+                                onClick = {
+                                    val id = orderIdInput.trim()
+                                    if (id.isNotBlank()) {
+                                        isCheckingOrder = true
+                                        orderCheckResult = null
+                                        scope.launch {
+                                            val res = HarakaPayClient.checkStatus(id)
+                                            isCheckingOrder = false
+                                            res.fold(
+                                                onSuccess = { status ->
+                                                    if (status.isCompleted) {
+                                                        orderCheckResult = "✓ Malipo Yamekamilika! (${status.status})"
+                                                        SubscriptionManager.activatePlan("monthly", id)
+                                                    } else {
+                                                        orderCheckResult = "⏳ Hali: ${status.status} (Inasubiri au haijakamilika)"
+                                                    }
+                                                },
+                                                onFailure = { err ->
+                                                    orderCheckResult = "Hitilafu: ${err.message}"
+                                                }
+                                            )
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeliVioletNeon)
                             ) {
-                                Text(
-                                    text = tierLabel,
-                                    color = tierColor,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                                if (isCheckingOrder) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Text("Angalia", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
+                        }
+
+                        if (orderCheckResult != null) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = orderCheckResult!!,
+                                color = if (orderCheckResult!!.startsWith("✓")) NeliGreenSuccess else NeliCyanAccent,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
-                HorizontalDivider(color = NeliSurfaceVariant.copy(alpha = 0.6f))
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                // Stats Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    StatColumn(
-                        count = "$favoritesCount",
-                        label = "Watchlist",
+                // 3. Quick Navigation Items
+                Text(
+                    text = "Maudhui Yangu & Huduma",
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AccountMenuCard(
+                        icon = Icons.Default.Download,
+                        title = "Filamu Zilizopakuliwa",
+                        subtitle = "Tazama filamu ulizopakua nje ya mtandao",
+                        onClick = onNavigateToDownloads
+                    )
+
+                    AccountMenuCard(
                         icon = Icons.Default.Favorite,
-                        iconTint = Color(0xFFFF5252),
-                        onClick = onNavigateToWatchlist
+                        title = "Filamu Ninazopenda (Favorites)",
+                        subtitle = "Orodha yako ya filamu zilizohifadhiwa",
+                        onClick = onNavigateToFavorites
                     )
 
-                    Box(
-                        modifier = Modifier
-                            .height(36.dp)
-                            .width(1.dp)
-                            .background(NeliSurfaceVariant)
+                    AccountMenuCard(
+                        icon = Icons.Default.NotificationsActive,
+                        title = "Arifa Kila Dakika 30",
+                        subtitle = "Inatuma mapendekezo ya filamu 2 bila usumbufu",
+                        badge = "Imewashwa",
+                        onClick = {
+                            MovieRecommendationScheduler.scheduleNext(context, 1000L)
+                            showTestNotificationToast = true
+                        }
                     )
 
-                    StatColumn(
-                        count = "$continueWatchingCount",
-                        label = "History",
-                        icon = Icons.Default.History,
-                        iconTint = NeliCyanAccent,
-                        onClick = onNavigateToWatchHistory
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .height(36.dp)
-                            .width(1.dp)
-                            .background(NeliSurfaceVariant)
-                    )
-
-                    StatColumn(
-                        count = country.code,
-                        label = "Country",
-                        icon = Icons.Default.Public,
-                        iconTint = Color(0xFF4CAF50),
-                        onClick = onChangeCountry
+                    AccountMenuCard(
+                        icon = Icons.Default.SupportAgent,
+                        title = "Msaada & WhatsApp",
+                        subtitle = "Wasiliana na huduma kwa wateja",
+                        onClick = {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/255712345678"))
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                // ignore
+                            }
+                        }
                     )
                 }
+
+                if (showTestNotificationToast) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "✓ Arifa ya jaribio inatumwa kwenye simu yako sasa!",
+                        color = NeliGreenSuccess,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 4. Logout / Session
+                if (uiState.currentUser != null) {
+                    Button(
+                        onClick = { viewModel.signOut() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0x22FF4757)
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x44FF4757))
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = null,
+                            tint = Color(0xFFFF4757),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Toka Kwenye Akaunti (Logout)",
+                            color = Color(0xFFFF4757),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(30.dp))
             }
         }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Required Buttons: Watchlist, Watch History, Downloads, Premium, Settings, Delete Account, Sign Out
-        Text(
-            text = "LIBRARY & CONTENT",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = NeliCyanAccent,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
-        )
-
-        AccountItemRow(
-            icon = Icons.Default.Favorite,
-            title = "Watchlist",
-            badgeText = "$favoritesCount saved",
-            onClick = onNavigateToWatchlist,
-            modifier = Modifier.testTag("account_watchlist_button")
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        AccountItemRow(
-            icon = Icons.Default.History,
-            title = "Watch History",
-            badgeText = "$continueWatchingCount items",
-            onClick = onNavigateToWatchHistory,
-            modifier = Modifier.testTag("account_history_button")
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        AccountItemRow(
-            icon = Icons.Default.Download,
-            title = "Downloads",
-            onClick = onNavigateToDownloads,
-            modifier = Modifier.testTag("account_downloads_button")
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "MEMBERSHIP",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = NeliTextSecondary,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
-        )
-
-        val isUserSubscribed = profile?.isSubscriptionActive == true
-        NeliPlayPremiumCard(
-            isPremium = isUserSubscribed,
-            plan = profile?.planDisplayName ?: "Monthly",
-            expiresDate = profile?.formattedExpiryDate?.ifBlank { "Active" } ?: "Active",
-            onActionClick = onOpenPremium
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Text(
-            text = "PREFERENCES",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = NeliTextSecondary,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        AccountItemRow(
-            icon = Icons.Default.Public,
-            title = "Country",
-            badgeText = "${country.flagEmoji}  ${country.name}",
-            onClick = onChangeCountry,
-            modifier = Modifier.testTag("account_country_button")
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        AccountItemRow(
-            icon = Icons.Default.Settings,
-            title = "Settings",
-            onClick = onNavigateToSettings,
-            modifier = Modifier.testTag("account_settings_button")
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "ACCOUNT ACTIONS",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFFFF8A80),
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
-        )
-
-        // Sign Out Button
-        AccountItemRow(
-            icon = Icons.AutoMirrored.Filled.ExitToApp,
-            title = "Sign Out",
-            iconTint = Color(0xFFFF8A80),
-            titleColor = Color(0xFFFF8A80),
-            onClick = onSignOutClick,
-            modifier = Modifier.testTag("account_sign_out_button")
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Delete Account Button
-        AccountItemRow(
-            icon = Icons.Default.DeleteForever,
-            title = "Delete Account",
-            iconTint = NeliLiveRed,
-            titleColor = NeliLiveRed,
-            onClick = onDeleteAccountClick,
-            modifier = Modifier.testTag("account_delete_account_button")
-        )
     }
 }
 
 @Composable
-private fun StatColumn(
-    count: String,
-    label: String,
-    icon: ImageVector,
-    iconTint: Color,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(5.dp))
-            Text(
-                text = count,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        }
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            color = NeliTextSecondary
-        )
-    }
-}
-
-@Composable
-private fun FeatureHighlightCard(
+private fun AccountMenuCard(
     icon: ImageVector,
     title: String,
-    description: String
+    subtitle: String,
+    badge: String? = null,
+    onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(NeliSurface)
-            .border(1.dp, NeliSurfaceVariant.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
-            .padding(14.dp),
+            .background(NeliSurfaceVariant)
+            .border(1.dp, Color(0x188B5CF6), RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(NeliBluePrimary.copy(alpha = 0.2f)),
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color(0x188B5CF6)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = NeliCyanAccent,
-                modifier = Modifier.size(22.dp)
+                tint = NeliVioletNeon,
+                modifier = Modifier.size(20.dp)
             )
         }
 
@@ -1329,242 +578,40 @@ private fun FeatureHighlightCard(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
+                color = Color.White,
                 fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = NeliTextPrimary
+                fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = description,
-                fontSize = 12.sp,
+                text = subtitle,
                 color = NeliTextSecondary,
-                lineHeight = 16.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun AccountItemRow(
-    icon: ImageVector,
-    title: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    iconTint: Color = NeliTextSecondary,
-    titleColor: Color = NeliTextPrimary,
-    badgeText: String? = null
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(NeliSurface)
-            .border(1.dp, NeliSurfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 15.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f, fill = false)
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = iconTint,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(14.dp))
-            Text(
-                text = title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = titleColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                fontSize = 11.sp
             )
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (badgeText != null) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(NeliSurfaceVariant)
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = badgeText,
-                        color = NeliCyanAccent,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
+        if (badge != null) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0x2200E676))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = badge,
+                    color = NeliGreenSuccess,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                contentDescription = null,
-                tint = NeliTextSecondary.copy(alpha = 0.5f),
-                modifier = Modifier.size(13.dp)
-            )
+            Spacer(modifier = Modifier.width(8.dp))
         }
-    }
-}
 
-@Composable
-fun NeliPlayPremiumCard(
-    isPremium: Boolean,
-    plan: String?,
-    expiresDate: String?,
-    onActionClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .border(
-                1.dp,
-                if (isPremium) Color(0xFFFFD700).copy(alpha = 0.6f) else NeliSurfaceVariant,
-                RoundedCornerShape(16.dp)
-            ),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isPremium) Color(0xFF1B2238) else NeliSurface
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+            contentDescription = null,
+            tint = Color.Gray,
+            modifier = Modifier.size(14.dp)
         )
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            if (isPremium) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.WorkspacePremium,
-                            contentDescription = null,
-                            tint = Color(0xFFFFD700),
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "NeliPlay Premium ✓",
-                            color = Color(0xFFFFD700),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF00C853).copy(alpha = 0.2f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "Active",
-                            color = Color(0xFF00E676),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Plan:", color = NeliTextSecondary, fontSize = 12.sp)
-                        Text(
-                            text = plan ?: "Monthly",
-                            color = NeliTextPrimary,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Status:", color = NeliTextSecondary, fontSize = 12.sp)
-                        Text(
-                            text = "Active",
-                            color = Color(0xFF00E676),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Expires:", color = NeliTextSecondary, fontSize = 12.sp)
-                        Text(
-                            text = expiresDate ?: "Active",
-                            color = NeliTextPrimary,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Button(
-                    onClick = onActionClick,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFFD700),
-                        contentColor = Color.Black
-                    ),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .testTag("manage_premium_button")
-                ) {
-                    Text("Manage Premium", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                }
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.WorkspacePremium,
-                        contentDescription = null,
-                        tint = Color(0xFFFFD700),
-                        modifier = Modifier.size(26.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "NeliPlay Premium",
-                            color = NeliTextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Furahia NeliPlay Premium.",
-                            color = NeliTextSecondary,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Button(
-                    onClick = onActionClick,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFFD700),
-                        contentColor = Color.Black
-                    ),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .testTag("get_premium_button")
-                ) {
-                    Text("Get Premium", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                }
-            }
-        }
     }
 }

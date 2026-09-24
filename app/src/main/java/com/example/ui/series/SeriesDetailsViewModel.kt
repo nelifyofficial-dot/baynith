@@ -12,6 +12,9 @@ import com.example.data.repository.EpisodeRepository
 import com.example.data.repository.SeriesRepository
 import com.example.data.repository.UserDataRepository
 import com.example.data.repository.AuthRepository
+import com.example.data.model.UserProfile
+import com.example.data.repository.LimitCheckResult
+import com.example.data.repository.SubscriptionLimitManager
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +33,7 @@ data class SeriesDetailsUiState(
     val resumeEpisode: Episode? = null,
     val isFavorite: Boolean = false,
     val isUserPremium: Boolean = false,
+    val userProfile: UserProfile? = null,
     val error: String? = null
 )
 
@@ -40,6 +44,7 @@ class SeriesDetailsViewModel(application: Application) : AndroidViewModel(applic
     private val userDataRepo = UserDataRepository(application)
     private val db = NeliPlayDatabase.getDatabase(application)
     private val watchProgressDao = db.watchProgressDao()
+    private val limitManager = SubscriptionLimitManager.getInstance(application)
 
     private val userProfileFlow = authRepo.currentUserFlow.flatMapLatest { user ->
         if (user != null) {
@@ -94,7 +99,8 @@ class SeriesDetailsViewModel(application: Application) : AndroidViewModel(applic
                         currentSeasonEpisodes = seasonEpisodes,
                         resumeEpisode = resumeCandidate,
                         isFavorite = isFav,
-                        isUserPremium = isPremiumUser
+                        isUserPremium = isPremiumUser,
+                        userProfile = userProfile
                     )
                 } else {
                     SeriesDetailsUiState(
@@ -106,6 +112,16 @@ class SeriesDetailsViewModel(application: Application) : AndroidViewModel(applic
                 _uiState.value = state
             }
         }
+    }
+
+    fun checkWatchAccess(contentId: String): LimitCheckResult {
+        val uid = authRepo.currentUser?.uid ?: ""
+        val profile = _uiState.value.userProfile
+        val result = limitManager.canWatchMovie(uid, contentId, profile)
+        if (result is LimitCheckResult.Allowed) {
+            limitManager.recordMovieWatched(uid, contentId)
+        }
+        return result
     }
 
     fun selectSeason(season: Int) {

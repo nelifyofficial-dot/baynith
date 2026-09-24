@@ -246,7 +246,8 @@ fun NeliPlayApp(
                     onSeriesClick = { seriesId ->
                         navController.navigate(Screen.SeriesDetails.createRoute(seriesId))
                     },
-                    onSettingsClick = { navController.navigate(Screen.Settings.route) }
+                    onSettingsClick = { navController.navigate(Screen.Settings.route) },
+                    onPremiumClick = { navController.navigate(Screen.Premium.route) }
                 )
             }
 

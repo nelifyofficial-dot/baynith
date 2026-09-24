@@ -2,8 +2,12 @@ package com.example.ui.home
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,17 +18,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -34,10 +42,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.cast.NeliPlayCastButton
 import com.example.ui.components.ContinueWatchingCard
 import com.example.ui.components.EmptyStateView
@@ -49,6 +61,8 @@ import com.example.ui.components.SectionHeader
 import com.example.ui.components.WidgetPinPromptDialog
 import com.example.ui.series.SeriesCard
 import com.example.ui.theme.NeliCyanAccent
+import com.example.ui.theme.NeliTextSecondary
+import com.example.ui.theme.NeliVioletNeon
 import com.example.ui.theme.NeliVoid
 import com.example.widget.NeliPlayWidgetProvider
 
@@ -61,6 +75,7 @@ fun HomeScreen(
     onTvClick: () -> Unit,
     onSeriesClick: (String) -> Unit = {},
     onSettingsClick: () -> Unit = {},
+    onPremiumClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -74,7 +89,7 @@ fun HomeScreen(
         }
     }
 
-    // Prompt user on installation / first run to allow our home screen widget for new movies
+    // Prompt user on installation / first run to allow our home screen widget
     val prefs = remember { context.getSharedPreferences("neliplay_widget_prefs", Context.MODE_PRIVATE) }
     var showWidgetPrompt by remember {
         mutableStateOf(!prefs.getBoolean("widget_prompt_handled", false))
@@ -96,36 +111,140 @@ fun HomeScreen(
         )
     }
 
+    // Category Tabs from the design
+    val categories = listOf("Trending", "New", "Movies", "Series", "TV Show", "Swahili DJs", "Action", "Comedy")
+    var selectedCategoryIndex by remember { mutableStateOf(0) }
+
     Scaffold(
         topBar = {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(NeliVoid)
                     .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                NeliPlayLogo(size = 36)
-
+                // Top Bar: EXACTLY Logo on left, and Cast, Search, Premium on right
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    NeliPlayCastButton(
-                        modifier = Modifier.size(36.dp)
-                    )
+                    // 1. Logo
+                    NeliPlayLogo(size = 36)
 
-                    IconButton(
-                        onClick = onSearchClick,
-                        modifier = Modifier.testTag("top_search_button")
+                    // 2. Actions: Cast, Search, Premium (neatly spaced)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = Color.White
-                        )
+                        // Cast Button with rounded glass container
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x18FFFFFF))
+                                .border(1.dp, Color(0x228B5CF6), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            NeliPlayCastButton(modifier = Modifier.size(24.dp))
+                        }
+
+                        // Search Button with rounded glass container
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x18FFFFFF))
+                                .border(1.dp, Color(0x228B5CF6), CircleShape)
+                                .clickable(onClick = onSearchClick)
+                                .testTag("top_search_button"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = Color.White,
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
+
+                        // Premium VIP Gold Pill Button
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color(0xFFFFD700), Color(0xFFFF9100))
+                                    )
+                                )
+                                .clickable(onClick = onPremiumClick)
+                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                                .testTag("top_premium_button"),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "VIP",
+                                tint = Color.Black,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "VIP",
+                                color = Color.Black,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
+                }
+
+                // Horizontal Category Navigation Tabs
+                val tabScrollState = rememberScrollState()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(tabScrollState)
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    categories.forEachIndexed { index, title ->
+                        val isSelected = selectedCategoryIndex == index
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    selectedCategoryIndex = index
+                                    if (title == "TV Show") {
+                                        onTvClick()
+                                    }
+                                }
+                                .padding(horizontal = 4.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = title,
+                                color = if (isSelected) Color.White else NeliTextSecondary,
+                                fontSize = 14.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(3.dp))
+                            if (isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .height(2.5.dp)
+                                        .width(18.dp)
+                                        .clip(CircleShape)
+                                        .background(NeliVioletNeon)
+                                )
+                            } else {
+                                Box(modifier = Modifier.height(2.5.dp))
+                            }
+                        }
                     }
                 }
             }
@@ -140,79 +259,113 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (uiState.isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = NeliCyanAccent)
-                }
-            } else if (uiState.featuredMovie == null && uiState.trendingMovies.isEmpty() && uiState.trendingSeries.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val hasError = !uiState.errorMessage.isNullOrBlank()
-                    EmptyStateView(
-                        title = if (hasError) "Unable to Load Movies" else "No Movies Available Right Now",
-                        message = uiState.errorMessage ?: "Published movies from NeliPlay Studio will appear here automatically in real time.",
-                        actionButtonText = if (hasError) "Watch Live TV" else "Watch Live TV",
-                        onActionClick = onTvClick
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 80.dp)
-                ) {
-                    // Hero Banner Slider
-                    val sliderMovies = if (uiState.featuredMovies.isNotEmpty()) {
-                        uiState.featuredMovies
-                    } else {
-                        listOfNotNull(uiState.featuredMovie)
-                    }
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val isTablet = maxWidth >= 600.dp
+                val contentPadding = if (isTablet) 32.dp else 16.dp
 
-                    if (sliderMovies.isNotEmpty()) {
-                        item {
-                            HeroBannerSlider(
-                                movies = sliderMovies,
-                                favoritesIds = uiState.favoritesIds,
-                                onWatchClick = onWatchClick,
-                                onToggleFavorite = { viewModel.toggleFavorite(it) },
-                                onDetailsClick = onMovieClick
-                            )
+                if (uiState.isLoading) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = NeliCyanAccent)
+                    }
+                } else if (uiState.featuredMovie == null && uiState.trendingMovies.isEmpty() && uiState.trendingSeries.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val hasError = !uiState.errorMessage.isNullOrBlank()
+                        EmptyStateView(
+                            title = if (hasError) "Hitilafu Katika Kupakia" else "Hakuna Filamu Kwa Sasa",
+                            message = uiState.errorMessage ?: "Filamu na tamthilia zitaonekana hapa pindi zitakapochapishwa.",
+                            actionButtonText = "Tazama Live TV",
+                            onActionClick = onTvClick
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 90.dp)
+                    ) {
+                        // 1. Centered Hero Card Carousel
+                        val sliderMovies = if (uiState.featuredMovies.isNotEmpty()) {
+                            uiState.featuredMovies
+                        } else {
+                            listOfNotNull(uiState.featuredMovie)
                         }
-                    }
 
-                    // Continue Watching
-                    if (uiState.continueWatching.isNotEmpty()) {
+                        if (sliderMovies.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                HeroBannerSlider(
+                                    movies = sliderMovies,
+                                    favoritesIds = uiState.favoritesIds,
+                                    onWatchClick = onWatchClick,
+                                    onToggleFavorite = { viewModel.toggleFavorite(it) },
+                                    onDetailsClick = onMovieClick
+                                )
+                            }
+                        }
+
+                        // 2. Continue Watching (if present)
+                        if (uiState.continueWatching.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(24.dp))
+                                SectionHeader(title = "Endelea Kutazama")
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = contentPadding),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    items(uiState.continueWatching, key = { it.movieId }) { item ->
+                                        ContinueWatchingCard(
+                                            item = item,
+                                            onClick = { onWatchClick(item.movieId) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3. "For You" / Zilizopendekezwa (Matching Mockup image 2 bottom section)
                         item {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            SectionHeader(title = "Continue Watching")
+                            Spacer(modifier = Modifier.height(26.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = contentPadding),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "For You",
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "See all",
+                                    color = NeliVioletNeon,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier
+                                        .clickable { onSearchClick() }
+                                        .padding(4.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            val forYouMovies = if (uiState.trendingMovies.isNotEmpty()) {
+                                uiState.trendingMovies
+                            } else {
+                                uiState.latestMovies
+                            }
+
                             LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                contentPadding = PaddingValues(horizontal = contentPadding),
                                 horizontalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
-                                items(uiState.continueWatching, key = { it.movieId }) { item ->
-                                    ContinueWatchingCard(
-                                        item = item,
-                                        onClick = { onWatchClick(item.movieId) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Trending Now (Movies)
-                    if (uiState.trendingMovies.isNotEmpty()) {
-                        item {
-                            Spacer(modifier = Modifier.height(20.dp))
-                            SectionHeader(title = "Trending Now")
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(uiState.trendingMovies, key = { it.id }) { movie ->
+                                items(forYouMovies, key = { it.id }) { movie ->
                                     MovieCard(
                                         movie = movie,
                                         onClick = { onMovieClick(movie.id) }
@@ -220,79 +373,80 @@ fun HomeScreen(
                                 }
                             }
                         }
-                    }
 
-                    // Trending TV Series (Requirement 1 & 25)
-                    if (uiState.trendingSeries.isNotEmpty()) {
-                        item {
-                            Spacer(modifier = Modifier.height(20.dp))
-                            SectionHeader(title = "Popular Series")
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(uiState.trendingSeries, key = { it.id }) { series ->
-                                    SeriesCard(
-                                        series = series,
-                                        onClick = { onSeriesClick(series.id) }
-                                    )
+                        // 4. Swahili Movies & Ma-DJ
+                        val swahiliList = uiState.trendingMovies.filter { it.isSwahili }
+                        if (swahiliList.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(24.dp))
+                                SectionHeader(title = "Filamu za Kiswahili • Ma-DJ")
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = contentPadding),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    items(swahiliList, key = { it.id }) { movie ->
+                                        MovieCard(
+                                            movie = movie,
+                                            onClick = { onMovieClick(movie.id) }
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // Latest Movies
-                    if (uiState.latestMovies.isNotEmpty()) {
-                        item {
-                            Spacer(modifier = Modifier.height(20.dp))
-                            SectionHeader(title = "Latest Movies")
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(uiState.latestMovies, key = { it.id }) { movie ->
-                                    MovieCard(
-                                        movie = movie,
-                                        onClick = { onMovieClick(movie.id) }
-                                    )
+                        // 5. Trending TV Series
+                        if (uiState.trendingSeries.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(24.dp))
+                                SectionHeader(title = "Tamthilia Zinazovuma")
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = contentPadding),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    items(uiState.trendingSeries, key = { it.id }) { series ->
+                                        SeriesCard(
+                                            series = series,
+                                            onClick = { onSeriesClick(series.id) }
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // Dynamic Categories / Genres from Firestore
-                    uiState.genreSections.forEach { (genre, movies) ->
-                        item {
-                            Spacer(modifier = Modifier.height(20.dp))
-                            SectionHeader(title = "$genre Movies")
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(movies, key = { it.id }) { movie ->
-                                    MovieCard(
-                                        movie = movie,
-                                        onClick = { onMovieClick(movie.id) }
-                                    )
+                        // 6. Latest Movies
+                        if (uiState.latestMovies.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(24.dp))
+                                SectionHeader(title = "Mpya Zaidi (Latest)")
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = contentPadding),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    items(uiState.latestMovies, key = { it.id }) { movie ->
+                                        MovieCard(
+                                            movie = movie,
+                                            onClick = { onMovieClick(movie.id) }
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // Adult Content Section (Moved from Trending to below with title Adult)
-                    if (uiState.adultMovies.isNotEmpty()) {
-                        item {
-                            Spacer(modifier = Modifier.height(20.dp))
-                            SectionHeader(title = "Adult")
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(uiState.adultMovies, key = { it.id }) { movie ->
-                                    MovieCard(
-                                        movie = movie,
-                                        onClick = { onMovieClick(movie.id) }
-                                    )
+                        // 7. Dynamic Genre sections
+                        uiState.genreSections.forEach { (genre, movies) ->
+                            item {
+                                Spacer(modifier = Modifier.height(24.dp))
+                                SectionHeader(title = "$genre Movies")
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = contentPadding),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    items(movies, key = { it.id }) { movie ->
+                                        MovieCard(
+                                            movie = movie,
+                                            onClick = { onMovieClick(movie.id) }
+                                        )
+                                    }
                                 }
                             }
                         }

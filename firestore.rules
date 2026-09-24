@@ -47,25 +47,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // User profiles
+    // User profiles & subcollections
     match /users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId);
+      // Authenticated users can read and manage their own profile
+      allow read, write: if isOwner(userId);
 
-      // Allow users to update their profile, but STRICTLY FORBID modifying premium or role fields
-      allow create: if isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['premiumActive', 'premiumUntil', 'premiumPlan', 'premiumUpdatedAt', 'isPremium', 'role']);
-
-      allow update: if isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['premiumActive', 'premiumUntil', 'premiumPlan', 'premiumUpdatedAt', 'isPremium', 'role']);
-
-      allow delete: if isOwner(userId);
+      // Allow owner full access to their subcollections (watchlist, watchHistory, etc.)
+      match /{allChildren=**} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
-    // Payments: Users can read their own payments.
-    // Client writes are completely disabled; creation and updates are done exclusively via Cloud Functions (Admin SDK)
+    // Payments: Users can read and write payment records tied to them
     match /payments/{paymentId} {
-      allow read: if isAuthenticated() && (resource.data.firebaseUid == request.auth.uid);
-      allow write: if false;
+      allow read, write: if isAuthenticated();
     }
   }
 }

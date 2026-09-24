@@ -35,6 +35,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -362,6 +365,17 @@ fun YouTubePlayerContainer(
                                 )
                             }
 
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_neliplay_logo),
+                                contentDescription = "NeliPlay Logo",
+                                modifier = Modifier
+                                    .size(if (isFullscreen) 28.dp else 22.dp)
+                                    .clip(CircleShape)
+                                    .border(1.dp, Color(0x668B5CF6), CircleShape)
+                            )
+
                             Spacer(modifier = Modifier.width(8.dp))
 
                             Text(
@@ -580,13 +594,17 @@ fun YouTubePlayerContainer(
                                     }
                                 }
 
-                                // Center Play / Pause
+                                // Center Play / Pause with luxury gradient glow
                                 Box(
                                     modifier = Modifier
-                                        .size(if (isFullscreen) 72.dp else 56.dp)
+                                        .size(if (isFullscreen) 74.dp else 58.dp)
                                         .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.7f))
-                                        .border(1.5.dp, NeliCyanAccent.copy(alpha = 0.6f), CircleShape)
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                listOf(Color(0xFF7C5CF7), Color(0xFF00E5FF))
+                                            )
+                                        )
+                                        .border(2.dp, Color.White.copy(alpha = 0.85f), CircleShape)
                                         .clickable { onPlayPause() },
                                     contentAlignment = Alignment.Center
                                 ) {

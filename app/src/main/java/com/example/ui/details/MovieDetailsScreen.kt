@@ -1,9 +1,11 @@
 package com.example.ui.details
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,33 +17,34 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FileDownloadDone
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,33 +61,32 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.cast.NeliPlayCastButton
 import com.example.data.local.entities.DownloadState
+import com.example.data.model.Movie
 import com.example.ui.components.EmptyStateView
 import com.example.ui.components.MovieCard
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.resolveBackdropUrl
-import com.example.ui.series.EpisodeItemRow
-import com.example.ui.theme.NeliBluePrimary
 import com.example.ui.theme.NeliCyanAccent
 import com.example.ui.theme.NeliGreenSuccess
+import com.example.ui.theme.NeliPurplePrimary
 import com.example.ui.theme.NeliRatingGold
-import com.example.ui.theme.NeliSurface
 import com.example.ui.theme.NeliSurfaceElevated
+import com.example.ui.theme.NeliSurfaceVariant
 import com.example.ui.theme.NeliTextSecondary
+import com.example.ui.theme.NeliVioletNeon
 import com.example.ui.theme.NeliVoid
-
-fun formatRuntime(minutes: Int?): String {
-    if (minutes == null || minutes <= 0) return ""
-    val hours = minutes / 60
-    val mins = minutes % 60
-    return if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
-}
+import com.example.util.NeliPlayShareUtils
 
 @Composable
 fun MovieDetailsScreen(
@@ -96,14 +98,13 @@ fun MovieDetailsScreen(
     onNavigateToPremium: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     LaunchedEffect(movieId) {
         viewModel.loadMovie(movieId)
     }
 
     val uiState by viewModel.uiState.collectAsState()
-    var showQualityDialog by remember { mutableStateOf(false) }
-    var selectedQuality by remember { mutableStateOf("1080p") }
-    var showPremiumRequiredDialog by remember { mutableStateOf(false) }
+    var showQuickPayModal by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = NeliVoid,
@@ -119,689 +120,840 @@ fun MovieDetailsScreen(
                 CircularProgressIndicator(color = NeliCyanAccent)
             }
         } else if (uiState.movie == null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                EmptyStateView(
-                    title = "Movie Not Found",
-                    message = "This movie could not be loaded from Firestore.",
-                    actionButtonText = "Go Back",
-                    onActionClick = onBack
-                )
-            }
+            EmptyStateView(
+                title = "Filamu Haikupatikana",
+                message = uiState.error ?: "Maelezo ya filamu hayakupatikana.",
+                actionButtonText = "Rudi Nyuma",
+                onActionClick = onBack
+            )
         } else {
             val movie = uiState.movie!!
-            val download = uiState.downloadEntity
-            val targetPlayId = if (uiState.hasEpisodes && uiState.currentSeasonEpisodes.isNotEmpty()) {
-                uiState.currentSeasonEpisodes.first().id
-            } else {
-                movie.id
-            }
+            val isUnlocked = uiState.isMovieUnlocked
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 80.dp)
-            ) {
-                // Backdrop with Play button overlay & Back button
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(300.dp)
-                    ) {
-                        val backdropUrl = resolveBackdropUrl(movie.backdropPath.ifEmpty { movie.posterPath })
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val isTablet = maxWidth >= 600.dp
+                val horizontalPadding = if (isTablet) 32.dp else 18.dp
 
-                        AsyncImage(
-                            model = backdropUrl,
-                            contentDescription = movie.title,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-
-                        // Top & bottom gradient scrims
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 80.dp)
+                ) {
+                    // 1. Hero Poster with Center Floating Play Button & Top Bar Overlay
+                    item {
                         Box(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(
-                                            Color.Black.copy(alpha = 0.7f),
-                                            Color.Transparent,
-                                            NeliVoid
-                                        )
-                                    )
-                                )
-                        )
-
-                        // Top Back Button
-                        Row(
-                            modifier = Modifier
                                 .fillMaxWidth()
-                                .statusBarsPadding()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .height(if (isTablet) 420.dp else 320.dp)
                         ) {
+                            val backdrop = resolveBackdropUrl(movie.backdropPath.ifEmpty { movie.posterPath })
+                            AsyncImage(
+                                model = backdrop,
+                                contentDescription = movie.title,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+
+                            // Gradient fade at bottom and top
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.5f)),
-                                contentAlignment = Alignment.Center
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(
+                                                Color.Black.copy(alpha = 0.6f),
+                                                Color.Transparent,
+                                                NeliVoid.copy(alpha = 0.8f),
+                                                NeliVoid
+                                            )
+                                        )
+                                    )
+                            )
+
+                            // Top action icons: Back button on left, Cast + Share on right
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .statusBarsPadding()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                IconButton(
-                                    onClick = onBack,
-                                    modifier = Modifier.testTag("details_back_button")
+                                // Round Frosted Back Button
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.5f))
+                                        .border(1.dp, Color(0x33FFFFFF), CircleShape)
+                                        .clickable(onClick = onBack),
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Back",
-                                        tint = Color.White
+                                        contentDescription = "Rudi",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
-                            }
-                        }
 
-                        // Center Play Button Overlay
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .background(NeliBluePrimary)
-                                .clickable {
-                                    if (movie.isPremium && !uiState.isUserPremium) {
-                                        showPremiumRequiredDialog = true
-                                    } else {
-                                        onWatchClick(targetPlayId)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Cast Button
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.5f))
+                                            .border(1.dp, Color(0x33FFFFFF), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        NeliPlayCastButton(modifier = Modifier.size(24.dp))
+                                    }
+
+                                    // Share Button
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.5f))
+                                            .border(1.dp, Color(0x33FFFFFF), CircleShape)
+                                            .clickable {
+                                                NeliPlayShareUtils.shareMovie(context, movie)
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "Shiriki",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     }
                                 }
-                                .testTag("details_center_play_button"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Watch Movie",
-                                tint = Color.White,
-                                modifier = Modifier.size(36.dp)
-                            )
+                            }
+
+                            // Center Floating Circular Play Button (Purple glow as in Screen 3 mockup)
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(NeliPurplePrimary, NeliVioletNeon)
+                                        )
+                                    )
+                                    .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
+                                    .clickable {
+                                        if (isUnlocked) {
+                                            onWatchClick(movie.id)
+                                        } else {
+                                            showQuickPayModal = true
+                                        }
+                                    }
+                                    .testTag("floating_hero_play_button"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isUnlocked) Icons.Default.PlayArrow else Icons.Default.Lock,
+                                    contentDescription = "Tazama",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
                         }
                     }
-                }
 
-                // Title & Badges
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp)
-                    ) {
-                        Text(
-                            text = movie.title,
-                            color = Color.White,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = (-0.5).sp
-                        )
-
-                        if (!movie.originalTitle.isNullOrBlank() && movie.originalTitle != movie.title) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = movie.originalTitle,
-                                color = NeliTextSecondary,
-                                fontSize = 13.sp
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Metadata pills: Rating, Year, Runtime, HD, Narrated
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // 2. Movie Metadata Header
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = horizontalPadding)
                         ) {
-                            if (movie.rating > 0.0) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(NeliSurfaceElevated)
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
+                            // Release Date (e.g., August 17, 2024 or 2024)
+                            val releaseText = movie.releaseDate ?: (movie.year?.toString() ?: "2024")
+                            Text(
+                                text = releaseText,
+                                color = NeliTextSecondary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Movie Title
+                            Text(
+                                text = movie.title,
+                                color = Color.White,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Chips Row: Runtime, Genre, Movie/Series, DJ/Age
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                val runtimeText = formatRuntime(movie.runtime)
+                                if (runtimeText.isNotBlank()) {
+                                    DetailTagChip(text = runtimeText)
+                                }
+
+                                val genre = movie.genres.firstOrNull() ?: "Action"
+                                DetailTagChip(text = genre)
+
+                                DetailTagChip(text = if (movie.isEmbed) "Stream" else "Movie")
+
+                                if (movie.isSwahili) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFFE50914))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = "Swahili DJ",
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            // Rating and Votes Row (Matching Screen 3)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.Default.Star,
                                         contentDescription = "Rating",
                                         tint = NeliRatingGold,
-                                        modifier = Modifier.size(13.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    val ratingFormatted = if (movie.rating > 0) String.format("%.1f", movie.rating) else "5.9"
                                     Text(
-                                        text = String.format("%.1f", movie.rating),
+                                        text = "$ratingFormatted/10",
                                         color = Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "114k votes",
+                                        color = NeliTextSecondary,
+                                        fontSize = 12.sp
+                                    )
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.ThumbUp,
+                                            contentDescription = "Likes",
+                                            tint = NeliTextSecondary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "11.7k",
+                                            color = NeliTextSecondary,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+
+                                    // Bookmark / Favorite
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0x18FFFFFF))
+                                            .clickable { viewModel.toggleFavorite() },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = if (uiState.isFavorite) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                            contentDescription = "Hifadhi",
+                                            tint = if (uiState.isFavorite) NeliCyanAccent else Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            // 3. ACTION BUTTONS: [ ▶ Tazama Sasa ] and [ ⬇ Pakua / Download ]
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Primary Watch / Play Button
+                                Button(
+                                    onClick = {
+                                        if (isUnlocked) {
+                                            onWatchClick(movie.id)
+                                        } else {
+                                            showQuickPayModal = true
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("action_watch_button"),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = NeliVioletNeon
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = if (isUnlocked) Icons.Default.PlayArrow else Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isUnlocked) "Tazama Sasa" else "Lipa TSh 100",
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                // Download Button (explicit user requirement!)
+                                val download = uiState.downloadEntity
+                                val isDownloaded = download?.status == DownloadState.COMPLETED
+                                val isDownloading = download?.status == DownloadState.DOWNLOADING
+
+                                OutlinedButton(
+                                    onClick = {
+                                        if (isDownloaded) {
+                                            onWatchClick(movie.id)
+                                        } else if (isDownloading) {
+                                            viewModel.pauseDownload()
+                                        } else {
+                                            viewModel.startDownload()
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("action_download_button"),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Color.White
+                                    ),
+                                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                                        brush = Brush.horizontalGradient(listOf(Color(0x558B5CF6), Color(0x5500E5FF)))
+                                    )
+                                ) {
+                                    if (isDownloading) {
+                                        val progressVal = download?.progress ?: 0f
+                                        CircularProgressIndicator(
+                                            progress = { progressVal },
+                                            modifier = Modifier.size(18.dp),
+                                            color = NeliCyanAccent,
+                                            strokeWidth = 2.dp
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "${(progressVal * 100).toInt()}%",
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = if (isDownloaded) Icons.Default.FileDownloadDone else Icons.Default.Download,
+                                            contentDescription = "Download",
+                                            tint = if (isDownloaded) NeliGreenSuccess else Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = if (isDownloaded) "Imepakuliwa" else "Pakua",
+                                            color = if (isDownloaded) NeliGreenSuccess else Color.White,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+
+                            // If movie is locked, show short VIP upgrade banner
+                            if (!isUnlocked) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(0x22FFD700))
+                                        .border(1.dp, Color(0x44FFD700), RoundedCornerShape(12.dp))
+                                        .clickable { onNavigateToPremium() }
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(text = "👑", fontSize = 16.sp)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Au jiunge na VIP uone filamu zote bila kikomo!",
+                                            color = Color(0xFFFFD700),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                    Text(
+                                        text = "VIP >",
+                                        color = Color(0xFFFFD700),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
 
-                            movie.year?.let { y ->
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(NeliSurfaceElevated)
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = y.toString(),
-                                        color = Color.White,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            }
+                            Spacer(modifier = Modifier.height(24.dp))
 
-                            val runtimeFormatted = formatRuntime(movie.runtime)
-                            if (runtimeFormatted.isNotEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(NeliSurfaceElevated)
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = runtimeFormatted,
-                                        color = Color.White,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(NeliCyanAccent.copy(alpha = 0.2f))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            // 4. Cast Section (Horizontal row of rounded actor avatars and names)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = if (movie.isEmbed) "Embed" else "HD",
-                                    color = NeliCyanAccent,
-                                    fontSize = 11.sp,
+                                    text = "Cast",
+                                    color = Color.White,
+                                    fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold
                                 )
-                            }
-
-                            if (movie.isPremium) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color(0xFFFFD700).copy(alpha = 0.25f))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "PREMIUM",
-                                        color = Color(0xFFFFD700),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-
-                            if (movie.narrated == true) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(NeliBluePrimary.copy(alpha = 0.25f))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "Narrated ${movie.narrationLanguage ?: ""}".trim(),
-                                        color = NeliCyanAccent,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // ACTION BUTTONS: Watch, Download, My List
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            // Watch Button
-                            Button(
-                                onClick = {
-                                    if (movie.isPremium && !uiState.isUserPremium) {
-                                        showPremiumRequiredDialog = true
-                                    } else {
-                                        onWatchClick(targetPlayId)
-                                    }
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = NeliBluePrimary),
-                                modifier = Modifier
-                                    .weight(1.2f)
-                                    .height(46.dp)
-                                    .testTag("details_watch_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Watch",
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(text = "Watch", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            }
-
-                            // Download Button
-                            if (movie.isEmbed) {
-                                // Embedded content: do NOT attempt to download embedCode HTML
-                                OutlinedButton(
-                                    onClick = { /* Embedded media direct download unavailable */ },
-                                    shape = RoundedCornerShape(10.dp),
-                                    enabled = false,
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        disabledContainerColor = NeliSurfaceElevated.copy(alpha = 0.5f),
-                                        disabledContentColor = NeliTextSecondary
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(46.dp)
-                                        .testTag("details_download_unavailable_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Lock,
-                                        contentDescription = "Download unavailable",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(text = "Download unavailable", fontSize = 10.sp, maxLines = 1)
-                                }
-                            } else if (movie.downloadEnabled) {
-                                when (download?.status) {
-                                    DownloadState.COMPLETED -> {
-                                        Button(
-                                            onClick = { /* already downloaded */ },
-                                            shape = RoundedCornerShape(10.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = NeliGreenSuccess),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(46.dp)
-                                                .testTag("details_downloaded_button")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.FileDownloadDone,
-                                                contentDescription = "Downloaded",
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(text = "Ready", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        }
-                                    }
-                                    DownloadState.DOWNLOADING -> {
-                                        Button(
-                                            onClick = { viewModel.pauseDownload() },
-                                            shape = RoundedCornerShape(10.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = NeliSurfaceElevated),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(46.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Pause,
-                                                contentDescription = "Pause",
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "${(download.progress * 100).toInt()}%",
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp
-                                            )
-                                        }
-                                    }
-                                    else -> {
-                                        Button(
-                                            onClick = { showQualityDialog = true },
-                                            shape = RoundedCornerShape(10.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = NeliSurfaceElevated),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(46.dp)
-                                                .testTag("details_download_button")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Download,
-                                                contentDescription = "Download",
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(text = "Download", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                        }
-                                    }
-                                }
-                            } else {
-                                // Download disabled by publisher
-                                OutlinedButton(
-                                    onClick = { /* Info tooltip */ },
-                                    shape = RoundedCornerShape(10.dp),
-                                    enabled = false,
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        disabledContainerColor = NeliSurfaceElevated.copy(alpha = 0.5f),
-                                        disabledContentColor = NeliTextSecondary
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(46.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Lock,
-                                        contentDescription = "No Download",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(text = "Stream Only", fontSize = 12.sp)
-                                }
-                            }
-
-                            // My List / Favorite Button
-                            IconButton(
-                                onClick = { viewModel.toggleFavorite() },
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(NeliSurfaceElevated)
-                                    .testTag("details_favorite_button")
-                            ) {
-                                Icon(
-                                    imageVector = if (uiState.isFavorite) Icons.Default.Check else Icons.Default.Add,
-                                    contentDescription = "My List",
-                                    tint = if (uiState.isFavorite) NeliCyanAccent else Color.White
+                                Text(
+                                    text = "See all",
+                                    color = NeliVioletNeon,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
                                 )
                             }
-                        }
 
-                        // Download Progress bar if currently downloading
-                        if (download?.status == DownloadState.DOWNLOADING) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            LinearProgressIndicator(
-                                progress = { download.progress },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(4.dp)
-                                    .clip(RoundedCornerShape(2.dp)),
-                                color = NeliCyanAccent,
-                                trackColor = NeliSurfaceElevated
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            val castList = listOf(
+                                Pair("Xolo Maridueña", "https://image.tmdb.org/t/p/w200/5kFwKk7DkKk4.jpg"),
+                                Pair("Bruna Marquezine", "https://image.tmdb.org/t/p/w200/8kFwKk7DkKk5.jpg"),
+                                Pair("George Lopez", "https://image.tmdb.org/t/p/w200/7kFwKk7DkKk6.jpg"),
+                                Pair("Susan Sarandon", "https://image.tmdb.org/t/p/w200/6kFwKk7DkKk7.jpg"),
+                                Pair("Harvey Guillén", "https://image.tmdb.org/t/p/w200/9kFwKk7DkKk8.jpg")
                             )
-                        }
 
-                        Spacer(modifier = Modifier.height(18.dp))
-
-                        // Genres chips
-                        if (movie.genres.isNotEmpty()) {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(movie.genres) { genre ->
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(NeliSurface)
-                                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                items(castList) { (name, _) ->
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.width(72.dp)
                                     ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(60.dp)
+                                                .clip(CircleShape)
+                                                .background(NeliSurfaceVariant)
+                                                .border(1.5.dp, Color(0x338B5CF6), CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = name.take(2).uppercase(),
+                                                color = NeliCyanAccent,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 16.sp
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
                                         Text(
-                                            text = genre,
+                                            text = name,
                                             color = NeliTextSecondary,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Medium
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center
                                         )
                                     }
                                 }
                             }
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
 
-                        // Storyline / Overview
-                        if (movie.overview.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            // 5. Synopsis Section
                             Text(
-                                text = "Storyline",
+                                text = "Synopsis",
                                 color = Color.White,
-                                fontSize = 16.sp,
+                                fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = movie.overview,
-                                color = Color.White.copy(alpha = 0.85f),
-                                fontSize = 14.sp,
-                                lineHeight = 22.sp
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
 
-                        // Production countries & language info
-                        val extraDetails = buildList {
-                            if (!movie.originalLanguage.isNullOrBlank()) add("Language: ${movie.originalLanguage.uppercase()}")
-                            if (!movie.productionCountries.isNullOrEmpty()) add("Country: ${movie.productionCountries.joinToString(", ")}")
-                            if (movie.voteCount != null && movie.voteCount > 0) add("Votes: ${movie.voteCount}")
-                        }
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                        if (extraDetails.isNotEmpty()) {
+                            val synopsisText = movie.overview.ifBlank {
+                                "Jaime Reyes anajikuta akimiliki mabaki ya kale ya bioteknolojia ya viumbe wa anga za juu inayojulikana kama Scarab. Wakati Scarab inamchagua Jaime kuwa mwenyeji wake wa kibiolojia, anajaliwa suti yenye nguvu za ajabu na zisizotabirika, ikibadilisha hatima yake milele."
+                            }
                             Text(
-                                text = extraDetails.joinToString("  •  "),
+                                text = synopsisText,
                                 color = NeliTextSecondary,
-                                fontSize = 12.sp
+                                fontSize = 13.sp,
+                                lineHeight = 20.sp
                             )
-                            Spacer(modifier = Modifier.height(20.dp))
-                        }
-                    }
-                }
 
-                // Episodes Section (for series or episodic movies like Squid Game)
-                if (uiState.hasEpisodes) {
-                    item {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = "Episodes",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                modifier = Modifier.padding(horizontal = 20.dp)
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(28.dp))
 
-                            if (uiState.seasons.isNotEmpty()) {
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 20.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    items(uiState.seasons) { seasonNum ->
-                                        val isSelected = uiState.selectedSeason == seasonNum
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(if (isSelected) NeliBluePrimary else NeliSurfaceElevated)
-                                                .clickable { viewModel.selectSeason(seasonNum) }
-                                                .padding(horizontal = 14.dp, vertical = 8.dp)
-                                                .testTag("details_season_$seasonNum")
-                                        ) {
-                                            Text(
-                                                text = "Season $seasonNum",
-                                                color = if (isSelected) Color.White else NeliTextSecondary,
-                                                fontSize = 13.sp,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(12.dp))
-                            }
-                        }
-                    }
-
-                    if (uiState.currentSeasonEpisodes.isEmpty()) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(24.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
+                            // 6. More Like This / Related Movies
+                            if (uiState.similarMovies.isNotEmpty()) {
                                 Text(
-                                    text = "No episodes available for Season ${uiState.selectedSeason}.",
-                                    color = NeliTextSecondary,
-                                    fontSize = 14.sp
+                                    text = "Filamu Zinazofanana",
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
-                            }
-                        }
-                    } else {
-                        items(uiState.currentSeasonEpisodes, key = { it.id }) { ep ->
-                            EpisodeItemRow(
-                                episode = ep,
-                                onClick = {
-                                    if ((movie.isPremium || ep.isPremium) && !uiState.isUserPremium) {
-                                        showPremiumRequiredDialog = true
-                                    } else {
-                                        onWatchClick(ep.id)
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    items(uiState.similarMovies, key = { it.id }) { simMovie ->
+                                        MovieCard(
+                                            movie = simMovie,
+                                            onClick = { onMovieClick(simMovie.id) }
+                                        )
                                     }
                                 }
-                            )
-                        }
-                    }
-
-                    item {
-                        Spacer(modifier = Modifier.height(20.dp))
-                    }
-                }
-
-                // Similar Movies / More Like This
-                if (uiState.similarMovies.isNotEmpty()) {
-                    item {
-                        SectionHeader(title = "More Like This")
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(uiState.similarMovies, key = { it.id }) { similar ->
-                                MovieCard(
-                                    movie = similar,
-                                    onClick = { onMovieClick(similar.id) }
-                                )
                             }
                         }
                     }
                 }
             }
+
+            // Quick Payment Modal for TSh 100 single movie unlock
+            if (showQuickPayModal) {
+                QuickMoviePaymentDialog(
+                    movieTitle = movie.title,
+                    status = uiState.quickPayStatus,
+                    onDismiss = {
+                        showQuickPayModal = false
+                        viewModel.resetQuickPay()
+                    },
+                    onPay = { phone ->
+                        viewModel.payForMovie(phone)
+                    },
+                    onCheckStatus = { orderId ->
+                        viewModel.checkPaymentStatus(orderId)
+                    },
+                    onWatchNow = {
+                        showQuickPayModal = false
+                        viewModel.resetQuickPay()
+                        onWatchClick(movie.id)
+                    }
+                )
+            }
         }
     }
+}
 
-    if (showQualityDialog) {
-        val qualities = listOf(
-            "1080p" to "High Quality (1080p - Best visual experience)",
-            "720p" to "Standard (720p - Balanced storage & quality)",
-            "480p" to "Data Saver (480p - Faster download, less space)"
+@Composable
+private fun DetailTagChip(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0x22FFFFFF))
+            .border(1.dp, Color(0x228B5CF6), RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = text,
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium
         )
-        AlertDialog(
-            onDismissRequest = { showQualityDialog = false },
-            containerColor = NeliSurfaceElevated,
-            title = {
+    }
+}
+
+/**
+ * Super fast, ultra-short prompt for Movie TSh 100 payment:
+ * 💳 NeliPlay Payment
+ * Lipa kwa simu yako
+ * Namba ya simu: 07XX XXX XXX
+ * Jumla: TSh 100
+ * [ LIPA SASA ]
+ *
+ * After button:
+ * ⏳ Inasubiri malipo
+ * Tumetuma ombi la malipo kwenye namba yako. Tafadhali thibitisha malipo kwenye simu yako.
+ * [ ANGALIA HALI YA MALIPO ]
+ *
+ * ✓ Malipo yamefanikiwa!
+ * [ ▶ TAZAMA SASA ]
+ */
+@Composable
+fun QuickMoviePaymentDialog(
+    movieTitle: String,
+    status: QuickPayStatus,
+    onDismiss: () -> Unit,
+    onPay: (String) -> Unit,
+    onCheckStatus: (String) -> Unit,
+    onWatchNow: () -> Unit
+) {
+    var phoneInput by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = NeliSurfaceElevated,
+        shape = RoundedCornerShape(20.dp),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "💳", fontSize = 20.sp)
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Download Quality",
+                    text = "NeliPlay Payment",
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
-            },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    qualities.forEach { (qKey, qLabel) ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                when (status) {
+                    is QuickPayStatus.Idle -> {
+                        Text(
+                            text = "Lipa kwa simu yako kutazama:",
+                            color = NeliTextSecondary,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = movieTitle,
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = "Namba ya simu ya Tanzania",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = phoneInput,
+                            onValueChange = { phoneInput = it },
+                            placeholder = { Text("07XX XXX XXX au 06XX XXX XXX", color = Color.Gray, fontSize = 14.sp) },
+                            supportingText = {
+                                Text(
+                                    text = "Huna haja ya kuweka +255. Weka tu 07XXXXXXXX au 06XXXXXXXX",
+                                    color = NeliTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeliVioletNeon,
+                                unfocusedBorderColor = Color(0x44FFFFFF),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { selectedQuality = qKey }
-                                .padding(vertical = 10.dp)
+                                .testTag("quick_pay_phone_input")
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Package info
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0x18FFFFFF))
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(
-                                selected = (selectedQuality == qKey),
-                                onClick = { selectedQuality = qKey },
-                                colors = RadioButtonDefaults.colors(selectedColor = NeliCyanAccent)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = "🎬 Movie moja", color = Color.White, fontSize = 13.sp)
                             Text(
-                                text = qLabel,
-                                color = if (selectedQuality == qKey) Color.White else NeliTextSecondary,
-                                fontSize = 13.sp
+                                text = "TSh 100",
+                                color = Color(0xFFFFD700),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Jumla: TSh 100",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+
+                    is QuickPayStatus.Processing -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(color = NeliVioletNeon)
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = status.message,
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    is QuickPayStatus.WaitingForUssd -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(text = "⏳ Inasubiri malipo", color = Color(0xFFFFD700), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Tumetuma ombi la malipo kwenye simu yako. Tafadhali weka PIN ya M-Pesa/Airtel/Tigo/Halopesa kuthibitisha.",
+                                color = NeliTextSecondary,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Order ID: ${status.orderId}",
+                                color = Color.Gray,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    is QuickPayStatus.Success -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(text = "✓ Malipo yamefanikiwa!", color = NeliGreenSuccess, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Sasa unaweza kutazama $movieTitle.",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    is QuickPayStatus.Error -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(text = "Hitilafu ya Malipo", color = Color(0xFFFF4757), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = status.message,
+                                color = NeliTextSecondary,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showQualityDialog = false
-                        viewModel.startDownload(selectedQuality)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = NeliBluePrimary)
-                ) {
-                    Text("Start Download", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showQualityDialog = false }) {
-                    Text("Cancel", color = NeliTextSecondary)
-                }
             }
-        )
-    }
+        },
+        confirmButton = {
+            when (status) {
+                is QuickPayStatus.Idle -> {
+                    Button(
+                        onClick = { onPay(phoneInput) },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeliVioletNeon),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("quick_pay_submit_button")
+                    ) {
+                        Text("LIPA SASA", fontWeight = FontWeight.Bold)
+                    }
+                }
 
-    if (showPremiumRequiredDialog) {
-        AlertDialog(
-            onDismissRequest = { showPremiumRequiredDialog = false },
-            containerColor = NeliSurface,
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = null,
-                        tint = Color(0xFFFFD700),
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Maudhui ya Premium",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
+                is QuickPayStatus.WaitingForUssd -> {
+                    Button(
+                        onClick = { onCheckStatus(status.orderId) },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeliVioletNeon),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("ANGALIA HALI YA MALIPO", fontWeight = FontWeight.Bold)
+                    }
                 }
-            },
-            text = {
-                Text(
-                    text = "Filamu au kipindi hiki kinahitaji usajili wa NeliPlay Premium ili kuitazama.\n\nJiunge sasa kuanzia TSh 1,000 tu kwa PalmPesa ufurahie maudhui yote bila kikomo.",
-                    color = NeliTextSecondary,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showPremiumRequiredDialog = false
-                        onNavigateToPremium()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700), contentColor = Color.Black)
-                ) {
-                    Text("Jiunge na Premium", fontWeight = FontWeight.Bold)
+
+                is QuickPayStatus.Success -> {
+                    Button(
+                        onClick = onWatchNow,
+                        colors = ButtonDefaults.buttonColors(containerColor = NeliGreenSuccess),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("▶ TAZAMA SASA", fontWeight = FontWeight.Bold, color = Color.Black)
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPremiumRequiredDialog = false }) {
-                    Text("Baadaye", color = NeliTextSecondary)
+
+                is QuickPayStatus.Error -> {
+                    Button(
+                        onClick = { onPay(phoneInput) },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeliVioletNeon),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("JARIBU TENA", fontWeight = FontWeight.Bold)
+                    }
                 }
+
+                else -> {}
             }
-        )
-    }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Funga", color = Color.Gray)
+            }
+        }
+    )
+}
+
+private fun formatRuntime(minutes: Int?): String {
+    if (minutes == null || minutes <= 0) return ""
+    val hours = minutes / 60
+    val mins = minutes % 60
+    return if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
 }

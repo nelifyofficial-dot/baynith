@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,9 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.model.Movie
-import com.example.ui.theme.NeliBorder
 import com.example.ui.theme.NeliRatingGold
-import com.example.ui.theme.NeliSurface
+import com.example.ui.theme.NeliSurfaceVariant
 import com.example.ui.theme.NeliTextSecondary
 
 fun resolveImageUrl(path: String?): String {
@@ -61,8 +61,8 @@ fun MovieCard(
     movie: Movie,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    cardWidth: Int = 135,
-    cardHeight: Int = 200
+    cardWidth: Int = 145,
+    cardHeight: Int = 210
 ) {
     Column(
         modifier = modifier
@@ -71,12 +71,13 @@ fun MovieCard(
             .testTag("movie_card_${movie.id}")
     ) {
         Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = NeliSurface),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = NeliSurfaceVariant),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             modifier = Modifier
                 .width(cardWidth.dp)
                 .height(cardHeight.dp)
+                .border(1.dp, Color(0x228B5CF6), RoundedCornerShape(16.dp))
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 val imageUrl = resolveImageUrl(movie.posterPath.ifEmpty { movie.backdropPath })
@@ -88,14 +89,48 @@ fun MovieCard(
                     contentScale = ContentScale.Crop
                 )
 
+                // Subtle bottom gradient
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.7f)
+                                ),
+                                startY = 300f
+                            )
+                        )
+                )
+
+                // Top left Swahili / DJ indicator
+                if (movie.isSwahili) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(6.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFE50914).copy(alpha = 0.9f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "DJ",
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+
                 // Top right HD badge
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(6.dp)
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(RoundedCornerShape(6.dp))
                         .background(Color.Black.copy(alpha = 0.75f))
-                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = "HD",
@@ -105,37 +140,32 @@ fun MovieCard(
                     )
                 }
 
-                // Bottom gradient for legibility & rating
-                Box(
+                // Bottom bar inside card: Rating chip
+                Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .align(Alignment.BottomCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
-                            )
-                        )
-                )
-
-                if (movie.rating > 0.0) {
+                        .align(Alignment.BottomStart)
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val ratingScore = if (movie.rating > 0) String.format("%.1f", movie.rating) else "5.9"
                     Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.65f))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = "Rating",
                             tint = NeliRatingGold,
-                            modifier = Modifier.size(12.dp)
+                            modifier = Modifier.size(11.dp)
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = String.format("%.1f", movie.rating),
+                            text = ratingScore,
                             color = Color.White,
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -145,28 +175,26 @@ fun MovieCard(
 
         Spacer(modifier = Modifier.height(6.dp))
 
+        // Title
         Text(
             text = movie.title,
             color = Color.White,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth()
         )
 
-        val metaText = listOfNotNull(
-            movie.year?.toString(),
-            movie.genres.firstOrNull()
-        ).joinToString(" • ")
-
-        if (metaText.isNotEmpty()) {
-            Text(
-                text = metaText,
-                color = NeliTextSecondary,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        // Subtitle (genre or year)
+        val genre = movie.genres.firstOrNull() ?: (movie.year?.toString() ?: "Filamu")
+        Text(
+            text = genre,
+            color = NeliTextSecondary,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }

@@ -54,16 +54,16 @@ fun ContinueWatchingCard(
 
     Column(
         modifier = modifier
-            .width(220.dp)
+            .width(230.dp)
             .clickable(onClick = onClick)
             .testTag("continue_watching_${item.movieId}")
     ) {
         Card(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = NeliSurface),
             modifier = Modifier
-                .width(220.dp)
-                .height(125.dp)
+                .width(230.dp)
+                .height(130.dp)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 val imageUrl = resolveBackdropUrl(item.backdropPath.ifEmpty { item.posterPath })
@@ -79,7 +79,7 @@ fun ContinueWatchingCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .size(38.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(Color.Black.copy(alpha = 0.65f)),
                     contentAlignment = Alignment.Center
@@ -88,7 +88,7 @@ fun ContinueWatchingCard(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = "Resume",
                         tint = Color.White,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
 
@@ -99,19 +99,19 @@ fun ContinueWatchingCard(
                         .fillMaxWidth()
                         .height(4.dp)
                         .align(Alignment.BottomCenter),
-                    color = NeliBluePrimary,
+                    color = Color(0xFF0FA226),
                     trackColor = Color.White.copy(alpha = 0.2f)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         Text(
             text = item.title,
             color = Color.White,
             fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

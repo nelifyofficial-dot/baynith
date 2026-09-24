@@ -32,6 +32,7 @@ class MainActivity : FragmentActivity() {
 
         // Initialize Firebase and Firestore with offline cache
         FirebaseManager.init(this)
+        com.example.data.repository.SubscriptionManager.init(this)
 
         // Sanitize WebView cache directory structure to prevent Chromium SimpleCache ENOENT/corrupt index errors
         com.example.ui.player.embed.NeliPlayEmbedUtils.sanitizeWebViewEnvironment(this)
@@ -39,6 +40,8 @@ class MainActivity : FragmentActivity() {
         // Initialize NeliPlay notification channel
         NeliPlayNotificationManager.createNotificationChannel(this)
         com.example.util.NeliNotificationManager.initChannels(this)
+        com.example.util.MovieRecommendationScheduler.createChannel(this)
+        com.example.util.MovieRecommendationScheduler.scheduleNext(this)
 
         // Request notification permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

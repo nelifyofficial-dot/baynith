@@ -52,6 +52,7 @@ data class UserProfile(
             "daily" -> "Daily (Siku 1)"
             "weekly" -> "Weekly (Wiki 1)"
             "monthly" -> "Monthly (Mwezi 1)"
+            "yearly" -> "Yearly (Mwaka 1)"
             else -> if (isSubscriptionActive) "Premium VIP" else "Standard (Free)"
         }
 

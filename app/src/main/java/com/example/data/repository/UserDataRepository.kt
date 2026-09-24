@@ -399,8 +399,10 @@ class UserDataRepository(context: Context) {
             }
 
             Log.d("UserDataRepository", "Synced local and cloud data successfully for uid: $uid")
+        } catch (e: com.google.firebase.firestore.FirebaseFirestoreException) {
+            Log.w("UserDataRepository", "Cloud sync notice (${e.code}): ${e.message}")
         } catch (e: Exception) {
-            Log.e("UserDataRepository", "Error syncing user data with Firebase: ${e.message}", e)
+            Log.w("UserDataRepository", "Error syncing user data with Firebase: ${e.message}")
         }
     }
 }
