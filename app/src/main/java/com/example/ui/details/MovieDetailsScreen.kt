@@ -74,6 +74,7 @@ import com.example.cast.NeliPlayCastButton
 import com.example.data.local.entities.DownloadState
 import com.example.data.model.Movie
 import com.example.ui.components.EmptyStateView
+import com.example.ui.components.HarakaPaymentDialog
 import com.example.ui.components.MovieCard
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.resolveBackdropUrl
@@ -648,24 +649,23 @@ fun MovieDetailsScreen(
                 }
             }
 
-            // Quick Payment Modal for TSh 100 single movie unlock
+            // Quick Payment Modal for TSh 100 single movie unlock using the new flow
             if (showQuickPayModal) {
-                QuickMoviePaymentDialog(
-                    movieTitle = movie.title,
-                    status = uiState.quickPayStatus,
+                HarakaPaymentDialog(
+                    itemTitle = movie.title,
+                    itemPosterUrl = movie.posterPath,
+                    movieId = movie.id,
+                    defaultPackageId = "movie_single",
                     onDismiss = {
                         showQuickPayModal = false
                         viewModel.resetQuickPay()
                     },
-                    onPay = { phone ->
-                        viewModel.payForMovie(phone)
-                    },
-                    onCheckStatus = { orderId ->
-                        viewModel.checkPaymentStatus(orderId)
+                    onPaymentSuccess = {
+                        viewModel.unlockMovie()
                     },
                     onWatchNow = {
                         showQuickPayModal = false
-                        viewModel.resetQuickPay()
+                        viewModel.unlockMovie()
                         onWatchClick(movie.id)
                     }
                 )

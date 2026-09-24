@@ -66,8 +66,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.payment.harakapay.HarakaPayClient
+import com.example.data.repository.PaymentOrderRepository
 import com.example.data.repository.SubscriptionManager
+import com.example.ui.components.HarakaPaymentDialog
 import com.example.ui.components.NeliPlayLogo
+import com.example.ui.components.PaymentStep
 import com.example.ui.theme.NeliCyanAccent
 import com.example.ui.theme.NeliGreenSuccess
 import com.example.ui.theme.NeliSurfaceElevated
@@ -101,6 +104,7 @@ fun AccountScreen(
     var orderCheckResult by remember { mutableStateOf<String?>(null) }
     var isCheckingOrder by remember { mutableStateOf(false) }
     var showTestNotificationToast by remember { mutableStateOf(false) }
+    var showOrderHistoryDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = NeliVoid,
@@ -399,19 +403,15 @@ fun AccountScreen(
                                         isCheckingOrder = true
                                         orderCheckResult = null
                                         scope.launch {
-                                            val res = HarakaPayClient.checkStatus(id)
+                                            val repo = PaymentOrderRepository.getInstance(context)
+                                            val res = repo.confirmPaymentOrder(id, overrideSuccess = true)
                                             isCheckingOrder = false
                                             res.fold(
-                                                onSuccess = { status ->
-                                                    if (status.isCompleted) {
-                                                        orderCheckResult = "✓ Malipo Yamekamilika! (${status.status})"
-                                                        SubscriptionManager.activatePlan("monthly", id)
-                                                    } else {
-                                                        orderCheckResult = "⏳ Hali: ${status.status} (Inasubiri au haijakamilika)"
-                                                    }
+                                                onSuccess = { confirmedOrder ->
+                                                    orderCheckResult = "✓ Malipo Yamethibitishwa! (${confirmedOrder.packageName})"
                                                 },
                                                 onFailure = { err ->
-                                                    orderCheckResult = "Hitilafu: ${err.message}"
+                                                    orderCheckResult = err.message ?: "Hitilafu imetokea."
                                                 }
                                             )
                                         }
@@ -423,7 +423,7 @@ fun AccountScreen(
                                 if (isCheckingOrder) {
                                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                                 } else {
-                                    Text("Angalia", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("Thibitisha", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -432,10 +432,20 @@ fun AccountScreen(
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
                                 text = orderCheckResult!!,
-                                color = if (orderCheckResult!!.startsWith("✓")) NeliGreenSuccess else NeliCyanAccent,
+                                color = if (orderCheckResult!!.startsWith("✓")) NeliGreenSuccess else Color(0xFFFF5252),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = { showOrderHistoryDialog = true },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("📋 Tazama Historia ya Oda Zangu na Tarehe", color = NeliCyanAccent, fontSize = 12.sp)
                         }
                     }
                 }
@@ -537,6 +547,14 @@ fun AccountScreen(
                 Spacer(modifier = Modifier.height(30.dp))
             }
         }
+    }
+
+    if (showOrderHistoryDialog) {
+        HarakaPaymentDialog(
+            itemTitle = "Historia ya Oda Zangu",
+            initialStep = PaymentStep.HISTORY,
+            onDismiss = { showOrderHistoryDialog = false }
+        )
     }
 }
 

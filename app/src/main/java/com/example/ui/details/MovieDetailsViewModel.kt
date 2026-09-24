@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 sealed class QuickPayStatus {
@@ -267,6 +268,14 @@ class MovieDetailsViewModel(application: Application) : AndroidViewModel(applica
                     return@launch
                 }
             }
+        }
+    }
+
+    fun unlockMovie() {
+        val currentMovie = _uiState.value.movie
+        if (currentMovie != null) {
+            SubscriptionManager.unlockMovie(currentMovie.id)
+            _uiState.update { it.copy(isMovieUnlocked = true) }
         }
     }
 

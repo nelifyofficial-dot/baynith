@@ -7,10 +7,12 @@ import androidx.room.RoomDatabase
 import com.example.data.local.dao.DownloadDao
 import com.example.data.local.dao.FavoriteDao
 import com.example.data.local.dao.MyListDao
+import com.example.data.local.dao.PaymentOrderDao
 import com.example.data.local.dao.WatchProgressDao
 import com.example.data.local.entities.DownloadEntity
 import com.example.data.local.entities.FavoriteEntity
 import com.example.data.local.entities.MyListEntity
+import com.example.data.local.entities.PaymentOrderEntity
 import com.example.data.local.entities.WatchProgressEntity
 
 @Database(
@@ -18,9 +20,10 @@ import com.example.data.local.entities.WatchProgressEntity
         WatchProgressEntity::class,
         FavoriteEntity::class,
         DownloadEntity::class,
-        MyListEntity::class
+        MyListEntity::class,
+        PaymentOrderEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class NeliPlayDatabase : RoomDatabase() {
@@ -28,6 +31,7 @@ abstract class NeliPlayDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDao
     abstract fun downloadDao(): DownloadDao
     abstract fun myListDao(): MyListDao
+    abstract fun paymentOrderDao(): PaymentOrderDao
 
     companion object {
         @Volatile

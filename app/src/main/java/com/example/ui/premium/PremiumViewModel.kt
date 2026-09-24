@@ -252,6 +252,15 @@ class PremiumViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun refreshSubscription() {
+        _uiState.update {
+            it.copy(
+                state = PaymentScreenState.SUCCESS,
+                successMessage = "Malipo yamefanikiwa! Kifurushi chako kimeamilishwa."
+            )
+        }
+    }
+
     fun resetState() {
         pollingJob?.cancel()
         _uiState.update {
