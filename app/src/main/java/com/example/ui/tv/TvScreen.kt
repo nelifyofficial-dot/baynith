@@ -251,6 +251,15 @@ fun TvScreen(
                         )
                     }
 
+                    // Bottom Banner Ad outside the video player
+                    item(span = { GridItemSpan(2) }) {
+                        com.example.ads.NeliAdBanner(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp)
+                        )
+                    }
+
                     item(span = { GridItemSpan(2) }) {
                         Spacer(modifier = Modifier.height(80.dp))
                     }

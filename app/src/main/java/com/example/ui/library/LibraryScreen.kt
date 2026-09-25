@@ -188,6 +188,14 @@ fun LibraryScreen(
                                 onRemove = { viewModel.removeFavorite(item.movieId) }
                             )
                         }
+
+                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                            com.example.ads.NeliAdBanner(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp)
+                            )
+                        }
                     }
                 }
             } else {
@@ -226,6 +234,14 @@ fun LibraryScreen(
                                 item = item,
                                 onResume = { onWatchClick(item.movieId) },
                                 onClick = { onMovieClick(item.movieId) }
+                            )
+                        }
+
+                        item {
+                            com.example.ads.NeliAdBanner(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp)
                             )
                         }
 

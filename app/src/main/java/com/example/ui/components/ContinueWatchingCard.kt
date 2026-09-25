@@ -32,7 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import androidx.compose.material.icons.filled.Close
 import com.example.data.local.entities.WatchProgressEntity
 import com.example.ui.theme.NeliBluePrimary
 import com.example.ui.theme.NeliSurface
@@ -42,6 +42,7 @@ import com.example.ui.theme.NeliTextSecondary
 fun ContinueWatchingCard(
     item: WatchProgressEntity,
     onClick: () -> Unit,
+    onRemove: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val progressFraction = if (item.durationMs > 0) {
@@ -68,12 +69,35 @@ fun ContinueWatchingCard(
             Box(modifier = Modifier.fillMaxSize()) {
                 val imageUrl = resolveBackdropUrl(item.backdropPath.ifEmpty { item.posterPath })
 
-                AsyncImage(
-                    model = imageUrl,
+                NeliPosterImage(
+                    imageUrl = imageUrl,
+                    fallbackTitle = item.title,
                     contentDescription = item.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
+
+                // Remove X button at top right
+                if (onRemove != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.65f))
+                            .clickable { onRemove() }
+                            .testTag("remove_continue_watching_${item.movieId}"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Remove",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
 
                 // Play icon overlay
                 Box(

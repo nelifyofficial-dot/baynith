@@ -144,4 +144,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             userDataRepository.toggleFavorite(movie)
         }
     }
+
+    fun removeContinueWatching(movieId: String) {
+        viewModelScope.launch {
+            userDataRepository.removeWatchProgress(movieId)
+        }
+    }
 }

@@ -63,6 +63,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import com.example.ui.player.findActivity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -105,7 +106,6 @@ fun MovieDetailsScreen(
     }
 
     val uiState by viewModel.uiState.collectAsState()
-    var showQuickPayModal by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = NeliVoid,
@@ -147,8 +147,9 @@ fun MovieDetailsScreen(
                                 .height(if (isTablet) 420.dp else 320.dp)
                         ) {
                             val backdrop = resolveBackdropUrl(movie.backdropPath.ifEmpty { movie.posterPath })
-                            AsyncImage(
-                                model = backdrop,
+                            com.example.ui.components.NeliPosterImage(
+                                imageUrl = backdrop,
+                                fallbackTitle = movie.title,
                                 contentDescription = movie.title,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
@@ -248,17 +249,13 @@ fun MovieDetailsScreen(
                                     )
                                     .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
                                     .clickable {
-                                        if (isUnlocked) {
-                                            onWatchClick(movie.id)
-                                        } else {
-                                            showQuickPayModal = true
-                                        }
+                                        onWatchClick(movie.id)
                                     }
                                     .testTag("floating_hero_play_button"),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (isUnlocked) Icons.Default.PlayArrow else Icons.Default.Lock,
+                                    imageVector = Icons.Default.PlayArrow,
                                     contentDescription = "Tazama",
                                     tint = Color.White,
                                     modifier = Modifier.size(36.dp)
@@ -407,11 +404,7 @@ fun MovieDetailsScreen(
                                 // Primary Watch / Play Button
                                 Button(
                                     onClick = {
-                                        if (isUnlocked) {
-                                            onWatchClick(movie.id)
-                                        } else {
-                                            showQuickPayModal = true
-                                        }
+                                        onWatchClick(movie.id)
                                     },
                                     modifier = Modifier
                                         .weight(1f)
@@ -423,14 +416,14 @@ fun MovieDetailsScreen(
                                     )
                                 ) {
                                     Icon(
-                                        imageVector = if (isUnlocked) Icons.Default.PlayArrow else Icons.Default.Lock,
+                                        imageVector = Icons.Default.PlayArrow,
                                         contentDescription = null,
                                         tint = Color.White,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = if (isUnlocked) "Tazama Sasa" else "Lipa TSh 100",
+                                        text = "Tazama Sasa",
                                         color = Color.White,
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold
@@ -441,15 +434,34 @@ fun MovieDetailsScreen(
                                 val download = uiState.downloadEntity
                                 val isDownloaded = download?.status == DownloadState.COMPLETED
                                 val isDownloading = download?.status == DownloadState.DOWNLOADING
+                                val isFailed = download?.status == DownloadState.FAILED
+                                var showDeleteDownloadDialog by remember { mutableStateOf(false) }
+
+                                val activity = context.findActivity()
+
+                                val startDownloadWithAd = {
+                                    if (activity != null) {
+                                        com.example.ads.AdManager.showInterstitialIfAllowed(activity) {
+                                            viewModel.startDownload()
+                                        }
+                                    } else {
+                                        viewModel.startDownload()
+                                    }
+                                }
 
                                 OutlinedButton(
                                     onClick = {
-                                        if (isDownloaded) {
-                                            onWatchClick(movie.id)
-                                        } else if (isDownloading) {
-                                            viewModel.pauseDownload()
-                                        } else {
-                                            viewModel.startDownload()
+                                        when {
+                                            isDownloaded -> {
+                                                // If already downloaded, show option or play offline directly; long click/dialog can remove
+                                                onWatchClick(movie.id)
+                                            }
+                                            isDownloading -> {
+                                                viewModel.pauseDownload()
+                                            }
+                                            else -> {
+                                                startDownloadWithAd()
+                                            }
                                         }
                                     },
                                     modifier = Modifier
@@ -461,7 +473,10 @@ fun MovieDetailsScreen(
                                         contentColor = Color.White
                                     ),
                                     border = ButtonDefaults.outlinedButtonBorder.copy(
-                                        brush = Brush.horizontalGradient(listOf(Color(0x558B5CF6), Color(0x5500E5FF)))
+                                        brush = Brush.horizontalGradient(
+                                            if (isDownloaded) listOf(Color(0xFF00E676), Color(0xFF00E5FF))
+                                            else listOf(Color(0x558B5CF6), Color(0x5500E5FF))
+                                        )
                                     )
                                 ) {
                                     if (isDownloading) {
@@ -474,22 +489,50 @@ fun MovieDetailsScreen(
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "${(progressVal * 100).toInt()}%",
+                                            text = "Downloading... ${(progressVal * 100).toInt()}%",
                                             color = Color.White,
-                                            fontSize = 14.sp,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    } else if (isDownloaded) {
+                                        Icon(
+                                            imageVector = Icons.Default.FileDownloadDone,
+                                            contentDescription = "Downloaded",
+                                            tint = NeliGreenSuccess,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "✓ Downloaded",
+                                            color = NeliGreenSuccess,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    } else if (isFailed) {
+                                        Icon(
+                                            imageVector = Icons.Default.Download,
+                                            contentDescription = "Retry",
+                                            tint = Color(0xFFFF5252),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Retry Download",
+                                            color = Color(0xFFFF5252),
+                                            fontSize = 13.sp,
                                             fontWeight = FontWeight.SemiBold
                                         )
                                     } else {
                                         Icon(
-                                            imageVector = if (isDownloaded) Icons.Default.FileDownloadDone else Icons.Default.Download,
+                                            imageVector = Icons.Default.Download,
                                             contentDescription = "Download",
-                                            tint = if (isDownloaded) NeliGreenSuccess else Color.White,
+                                            tint = Color.White,
                                             modifier = Modifier.size(20.dp)
                                         )
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = if (isDownloaded) "Imepakuliwa" else "Pakua",
-                                            color = if (isDownloaded) NeliGreenSuccess else Color.White,
+                                            text = "Download",
+                                            color = Color.White,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.SemiBold
                                         )
@@ -497,8 +540,8 @@ fun MovieDetailsScreen(
                                 }
                             }
 
-                            // If movie is locked, show short VIP upgrade banner
-                            if (!isUnlocked) {
+                            // VIP upgrade banner hidden for now as requested
+                            if (false && !isUnlocked) {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Row(
                                     modifier = Modifier
@@ -644,31 +687,18 @@ fun MovieDetailsScreen(
                                     }
                                 }
                             }
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            // Non-intrusive bottom banner ad for Movie Details
+                            com.example.ads.NeliAdBanner(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                            )
                         }
                     }
                 }
-            }
-
-            // Quick Payment Modal for TSh 100 single movie unlock using the new flow
-            if (showQuickPayModal) {
-                HarakaPaymentDialog(
-                    itemTitle = movie.title,
-                    itemPosterUrl = movie.posterPath,
-                    movieId = movie.id,
-                    defaultPackageId = "movie_single",
-                    onDismiss = {
-                        showQuickPayModal = false
-                        viewModel.resetQuickPay()
-                    },
-                    onPaymentSuccess = {
-                        viewModel.unlockMovie()
-                    },
-                    onWatchNow = {
-                        showQuickPayModal = false
-                        viewModel.unlockMovie()
-                        onWatchClick(movie.id)
-                    }
-                )
             }
         }
     }

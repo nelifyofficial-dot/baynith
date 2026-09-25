@@ -185,6 +185,26 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun signInWithGoogle(context: Context) {
+        viewModelScope.launch {
+            _isSigningIn.value = true
+            _error.value = null
+            _message.value = null
+
+            val result = authRepo.signInWithGoogle(context, autoSelectOnly = false)
+            _isSigningIn.value = false
+
+            result.onSuccess { user ->
+                val currentCountry = userDataRepo.userCountry.firstOrNull() ?: RegionService.DEFAULT_COUNTRY_CODE
+                authRepo.syncUserProfile(user, country = currentCountry)
+                userDataRepo.syncUserDataWithFirebase(user.uid)
+                _message.value = "Karibu, ${user.displayName ?: user.email ?: "Mtumiaji"}!"
+            }.onFailure { err ->
+                _error.value = err.message ?: "Kuingia na Google kumeshindwa."
+            }
+        }
+    }
+
     fun selectCountry(countryCode: String) {
         viewModelScope.launch {
             val upper = countryCode.trim().uppercase()

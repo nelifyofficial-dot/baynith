@@ -170,35 +170,7 @@ fun HomeScreen(
                             )
                         }
 
-                        // Premium VIP Gold Pill Button
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(
-                                    Brush.horizontalGradient(
-                                        listOf(Color(0xFFFFD700), Color(0xFFFF9100))
-                                    )
-                                )
-                                .clickable(onClick = onPremiumClick)
-                                .padding(horizontal = 12.dp, vertical = 7.dp)
-                                .testTag("top_premium_button"),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = "VIP",
-                                tint = Color.Black,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "VIP",
-                                color = Color.Black,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 0.5.sp
-                            )
-                        }
+                        // VIP button hidden for now as requested
                     }
                 }
 
@@ -320,7 +292,8 @@ fun HomeScreen(
                                     items(uiState.continueWatching, key = { it.movieId }) { item ->
                                         ContinueWatchingCard(
                                             item = item,
-                                            onClick = { onWatchClick(item.movieId) }
+                                            onClick = { onWatchClick(item.movieId) },
+                                            onRemove = { viewModel.removeContinueWatching(item.movieId) }
                                         )
                                     }
                                 }
@@ -372,6 +345,16 @@ fun HomeScreen(
                                     )
                                 }
                             }
+                        }
+
+                        // Banner ad after "For You" section (separated by content)
+                        item {
+                            Spacer(modifier = Modifier.height(18.dp))
+                            com.example.ads.NeliAdBanner(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = contentPadding)
+                            )
                         }
 
                         // 4. Swahili Movies & Ma-DJ

@@ -247,8 +247,9 @@ private fun HeroCard(
             .background(NeliSurfaceVariant)
             .clickable(onClick = onClick)
     ) {
-        AsyncImage(
-            model = backdropUrl,
+        NeliPosterImage(
+            imageUrl = backdropUrl,
+            fallbackTitle = movie.title,
             contentDescription = movie.title,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop

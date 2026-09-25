@@ -34,6 +34,9 @@ class MainActivity : FragmentActivity() {
         FirebaseManager.init(this)
         com.example.data.repository.SubscriptionManager.init(this)
 
+        // Initialize Google Mobile Ads SDK (AdMob) safely once at application startup
+        com.example.ads.AdManager.init(this)
+
         // Sanitize WebView cache directory structure to prevent Chromium SimpleCache ENOENT/corrupt index errors
         com.example.ui.player.embed.NeliPlayEmbedUtils.sanitizeWebViewEnvironment(this)
 

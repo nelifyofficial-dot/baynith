@@ -131,7 +131,7 @@ dependencies {
   implementation(libs.androidx.activity.ktx)
   implementation(libs.androidx.constraintlayout)
   implementation(libs.material)
-  // implementation(libs.play.services.ads)
+  implementation(libs.play.services.ads)
 
   implementation(libs.firebase.auth)
   implementation(libs.androidx.credentials)

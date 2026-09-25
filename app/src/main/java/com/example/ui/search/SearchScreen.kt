@@ -658,6 +658,15 @@ fun SearchScreen(
                             Spacer(modifier = Modifier.height(14.dp))
                         }
                     }
+
+                    // Banner ad below search content
+                    item {
+                        com.example.ads.NeliAdBanner(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
             }
         }

@@ -198,8 +198,9 @@ fun SeriesCard(
                 .background(NeliSurface)
         ) {
             val imgUrl = series.posterPath.ifBlank { series.backdropPath }
-            AsyncImage(
-                model = imgUrl,
+            com.example.ui.components.NeliPosterImage(
+                imageUrl = imgUrl,
+                fallbackTitle = series.name,
                 contentDescription = series.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

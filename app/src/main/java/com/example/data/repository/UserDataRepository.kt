@@ -72,6 +72,10 @@ class UserDataRepository(context: Context) {
         watchProgressDao.clearAll()
     }
 
+    suspend fun removeWatchProgress(movieId: String) {
+        watchProgressDao.deleteProgress(movieId)
+    }
+
     // Favorites
     val favoritesList: Flow<List<FavoriteEntity>> = favoriteDao.getAllFavorites()
 

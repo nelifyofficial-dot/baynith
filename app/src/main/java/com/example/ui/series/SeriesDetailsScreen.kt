@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import com.example.ui.player.findActivity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -82,7 +83,6 @@ fun SeriesDetailsScreen(
     }
 
     val uiState by viewModel.uiState.collectAsState()
-    var showPremiumRequiredDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     Scaffold(
         containerColor = NeliVoid,
@@ -223,7 +223,8 @@ fun SeriesDetailsScreen(
                                 )
                             }
 
-                            if (series.isPremium) {
+                            // VIP/Premium badge hidden for now
+                            if (false && series.isPremium) {
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
@@ -442,16 +443,11 @@ fun SeriesDetailsScreen(
                         EpisodeItemRow(
                             episode = episode,
                             onClick = {
-                                if ((series.isPremium || episode.isPremium) && !uiState.isUserPremium) {
-                                    showPremiumRequiredDialog = true
-                                } else {
-                                    onPlayEpisode(episode.id)
-                                }
+                                onPlayEpisode(episode.id)
                             },
                             onDownload = {
-                                if ((series.isPremium || episode.isPremium) && !uiState.isUserPremium) {
-                                    showPremiumRequiredDialog = true
-                                } else {
+                                val activity = context.findActivity()
+                                val doDownload = {
                                     viewModel.downloadEpisode(episode)
                                     Toast.makeText(
                                         context,
@@ -459,9 +455,25 @@ fun SeriesDetailsScreen(
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }
+                                if (activity != null) {
+                                    com.example.ads.AdManager.showInterstitialIfAllowed(activity) {
+                                        doDownload()
+                                    }
+                                } else {
+                                    doDownload()
+                                }
                             }
                         )
                     }
+                }
+
+                item {
+                    // Non-intrusive bottom banner ad for Series Details
+                    com.example.ads.NeliAdBanner(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp)
+                    )
                 }
 
                 item {
@@ -469,53 +481,6 @@ fun SeriesDetailsScreen(
                 }
             }
         }
-    }
-
-    if (showPremiumRequiredDialog) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showPremiumRequiredDialog = false },
-            containerColor = NeliSurface,
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.Lock,
-                        contentDescription = null,
-                        tint = Color(0xFFFFD700),
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Maudhui ya Premium",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            },
-            text = {
-                Text(
-                    text = "Tamthilia hii inahitaji usajili wa NeliPlay Premium ili kuitazama.\n\nJiunge sasa kuanzia TSh 1,000 tu kwa PalmPesa ufurahie vipindi vyote bila kikomo.",
-                    color = NeliTextSecondary,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showPremiumRequiredDialog = false
-                        onNavigateToPremium()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700), contentColor = Color.Black)
-                ) {
-                    Text("Jiunge na Premium", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { showPremiumRequiredDialog = false }) {
-                    Text("Baadaye", color = NeliTextSecondary)
-                }
-            }
-        )
     }
 }
 
@@ -539,8 +504,9 @@ fun EpisodeItemRow(
                 .clip(RoundedCornerShape(8.dp))
                 .background(NeliSurface)
         ) {
-            AsyncImage(
-                model = episode.stillPath,
+            com.example.ui.components.NeliPosterImage(
+                imageUrl = episode.stillPath,
+                fallbackTitle = "E${episode.episodeNumber}",
                 contentDescription = episode.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

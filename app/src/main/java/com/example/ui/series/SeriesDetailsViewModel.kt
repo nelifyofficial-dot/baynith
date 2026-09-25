@@ -90,7 +90,8 @@ class SeriesDetailsViewModel(application: Application) : AndroidViewModel(applic
                     val resumeCandidate = episodes.firstOrNull { it.id in watchedEpIds }
                         ?: episodes.firstOrNull()
 
-                    val isPremiumUser = userProfile?.isSubscriptionActive == true || userProfile?.isAdmin == true
+                    // VIP and plans hidden for now, all users have full Netflix-style access
+                    val isPremiumUser = true
 
                     SeriesDetailsUiState(
                         isLoading = false,

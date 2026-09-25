@@ -69,9 +69,19 @@ class DownloadRepository(
             return
         }
 
-        // Check network
-        if (!isNetworkAvailable(wifiOnly)) {
-            scope.launch {
+        // Check if already completed and local file still exists: DO NOT download again!
+        scope.launch {
+            val existing = downloadDao.getDownload(movie.id)
+            if (existing != null && existing.status == DownloadState.COMPLETED) {
+                val file = existing.localFilePath?.let { File(it) }
+                if (file != null && file.exists() && file.length() > 0) {
+                    Log.d(TAG, "Movie ${movie.title} is already fully downloaded at ${file.absolutePath}. Skipping duplicate download.")
+                    return@launch
+                }
+            }
+
+            // Check network
+            if (!isNetworkAvailable(wifiOnly)) {
                 val errorMsg = if (wifiOnly) "Wi-Fi required for downloads" else "No internet connection"
                 downloadDao.insertOrUpdate(
                     DownloadEntity(
@@ -83,17 +93,17 @@ class DownloadRepository(
                         errorMessage = errorMsg
                     )
                 )
+                return@launch
             }
-            return
-        }
 
-        // Cancel existing job if running
-        activeJobs[movie.id]?.cancel()
+            // Cancel existing job if running
+            activeJobs[movie.id]?.cancel()
 
-        val job = scope.launch {
-            downloadMovieInternal(movie)
+            val job = scope.launch {
+                downloadMovieInternal(movie)
+            }
+            activeJobs[movie.id] = job
         }
-        activeJobs[movie.id] = job
     }
 
     /**

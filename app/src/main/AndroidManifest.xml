@@ -25,6 +25,11 @@
         android:largeHeap="true"
         android:theme="@style/Theme.MyApplication">
 
+        <!-- Google Mobile Ads SDK (AdMob) App ID -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-4408731854837351~4416275156" />
+
         <!-- Google Cast Options Provider -->
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"

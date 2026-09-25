@@ -237,6 +237,15 @@ fun DownloadsScreen(
                                 onDelete = { viewModel.deleteDownload(item.movieId) }
                             )
                         }
+
+                        item {
+                            com.example.ads.NeliAdBanner(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp)
+                            )
+                        }
+
                         item {
                             Spacer(modifier = Modifier.height(80.dp))
                         }

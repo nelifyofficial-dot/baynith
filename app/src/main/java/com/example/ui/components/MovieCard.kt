@@ -82,8 +82,9 @@ fun MovieCard(
             Box(modifier = Modifier.fillMaxSize()) {
                 val imageUrl = resolveImageUrl(movie.posterPath.ifEmpty { movie.backdropPath })
 
-                AsyncImage(
-                    model = imageUrl,
+                NeliPosterImage(
+                    imageUrl = imageUrl,
+                    fallbackTitle = movie.title,
                     contentDescription = movie.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop

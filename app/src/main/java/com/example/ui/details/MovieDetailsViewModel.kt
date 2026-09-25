@@ -118,15 +118,9 @@ class MovieDetailsViewModel(application: Application) : AndroidViewModel(applica
                         .filter { it.seasonNumber == activeSeason }
                         .sortedBy { it.episodeNumber }
 
-                    val isPremiumUser = userProfile?.isSubscriptionActive == true ||
-                            userProfile?.isAdmin == true ||
-                            subState.isVip
-
-                    // A movie is unlocked if:
-                    // 1. It's not premium-restricted (movie.isPremium == false)
-                    // 2. OR user is VIP
-                    // 3. OR movie has been bought individually for TSh 100
-                    val isUnlocked = !movie.isPremium || isPremiumUser || subState.unlockedMovieIds.contains(movie.id)
+                    // VIP and plans hidden for now, all movies are unlocked like Netflix
+                    val isPremiumUser = true
+                    val isUnlocked = true
 
                     MovieDetailsUiState(
                         isLoading = false,
